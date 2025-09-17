@@ -110,33 +110,97 @@ def process_document_in_memory(template_path, replacements):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        # Получаем данные из формы
+        # Получаем основные данные из формы
         surname = request.form.get('surname', '').strip()
         name = request.form.get('name', '').strip()
         patronymic = request.form.get('patronymic', '').strip()
+        passport_data = request.form.get('passport_data', '').strip()
+        registered_address = request.form.get('registered_address', '').strip()
         inn = request.form.get('inn', '').strip()
+        snils = request.form.get('snils', '').strip()
+        debt_amount_digits = request.form.get('debt_amount_digits', '').strip()
+        debt_amount_words = request.form.get('debt_amount_words', '').strip()
         
-        # Валидация
-        if not all([surname, name, patronymic, inn]):
-            flash('Все поля обязательны для заполнения', 'error')
+        # Валидация основных полей
+        required_fields = [surname, name, patronymic, passport_data, registered_address, inn, snils, debt_amount_digits, debt_amount_words]
+        if not all(required_fields):
+            flash('Все основные поля обязательны для заполнения', 'error')
             return redirect(url_for('index'))
         
         if len(inn) != 12 or not inn.isdigit():
             flash('ИНН должен содержать ровно 12 цифр', 'error')
             return redirect(url_for('index'))
         
+        # Получаем данные о кредиторах
+        creditors = []
+        creditor_num = 1
+        while True:
+            creditor_name = request.form.get(f'creditor_name_{creditor_num}', '').strip()
+            creditor_address = request.form.get(f'creditor_address_{creditor_num}', '').strip()
+            
+            if not creditor_name and not creditor_address:
+                break
+            
+            if not creditor_name or not creditor_address:
+                flash(f'Заполните все поля для кредитора {creditor_num}', 'error')
+                return redirect(url_for('index'))
+            
+            creditors.append({
+                'name': creditor_name,
+                'address': creditor_address
+            })
+            creditor_num += 1
+        
+        if not creditors:
+            flash('Необходимо указать хотя бы одного кредитора', 'error')
+            return redirect(url_for('index'))
+        
         try:
             # Получаем текущую дату
             current_date = datetime.now()
             
-            # Подготавливаем замены
+            # Получаем первые буквы имени и отчества
+            first_letter_name = name[0].upper() if name else ''
+            first_letter_patronymic = patronymic[0].upper() if patronymic else ''
+            
+            # Получаем название месяца на русском языке
+            months_ru = [
+                '', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
+            ]
+            month_name = months_ru[current_date.month]
+            
+            # Подготавливаем основные замены
             replacements = {
                 "{Фамилия}": surname,
                 "{Имя}": name,
                 "{Отчество}": patronymic,
+                "{паспортные данные}": passport_data,
+                "{Зарегистрирован по адресу}": registered_address,
                 "{ИНН}": inn,
-                "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г."
+                "{СНИЛС}": snils,
+                "{сумма долга цифрами}": debt_amount_digits,
+                "{сумма долга буквами}": debt_amount_words,
+                "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
+                "{число месяца}": str(current_date.day),
+                "{месяц}": month_name,
+                "{год}": str(current_date.year),
+                "{Первая буква имени}": first_letter_name,
+                "{первая буква отчества}": first_letter_patronymic
             }
+            
+            # Добавляем замены для кредиторов
+            # Для первого кредитора используем общие плейсхолдеры
+            if creditors:
+                replacements["{Наименование кредитора}"] = creditors[0]['name']
+                replacements["{Почтовый индекс и адрес}"] = creditors[0]['address']
+            
+            # Добавляем замены для всех кредиторов с номерами
+            for i, creditor in enumerate(creditors, 1):
+                replacements[f"{{Кредитор {i}}}"] = f"Кредитор {i}"
+                replacements[f"{{Кредитор n}}"] = f"Кредитор {i}" if i == 1 else replacements.get(f"{{Кредитор n}}", f"Кредитор {i}")
+                if i > 1:
+                    replacements[f"{{Кредитор n+{i-1}}}"] = f"Кредитор {i}"
             
             # Обрабатываем документ
             template_path = "42ea1332-1e5e-43db-90ac-9ec0b29f1bee.docx"
@@ -147,7 +211,7 @@ def index():
             processed_doc = process_document_in_memory(template_path, replacements)
             
             # Формируем имя файла
-            filename = f"bankruptcy_document_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
+            filename = f"bankruptcy_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
             
             # Отправляем файл для скачивания
             return send_file(
