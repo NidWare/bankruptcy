@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  bankruptcy-service:
+    build: .
+    ports:
+      - "50400:8080"
+    volumes:
+      # Монтируем шаблоны документов
+      - ./42ea1332-1e5e-43db-90ac-9ec0b29f1bee.docx:/app/42ea1332-1e5e-43db-90ac-9ec0b29f1bee.docx:ro
+      - ./templates:/app/templates:ro
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+    restart: unless-stopped
+    container_name: bankruptcy-service 
