@@ -283,7 +283,7 @@ if __name__ == "__main__":
     }
 
     replace_placeholders(
-        "42ea1332-1e5e-43db-90ac-9ec0b29f1bee.docx",
+        "zayav.docx",
         "output.docx",
         replacements
     )

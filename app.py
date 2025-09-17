@@ -203,7 +203,7 @@ def index():
                     replacements[f"{{Кредитор n+{i-1}}}"] = f"Кредитор {i}"
             
             # Обрабатываем документ
-            template_path = "42ea1332-1e5e-43db-90ac-9ec0b29f1bee.docx"
+            template_path = "zayav.docx"
             if not os.path.exists(template_path):
                 flash('Файл шаблона не найден', 'error')
                 return redirect(url_for('index'))

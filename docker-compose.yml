@@ -7,7 +7,7 @@ services:
       - "50400:8080"
     volumes:
       # Монтируем шаблоны документов
-      - ./42ea1332-1e5e-43db-90ac-9ec0b29f1bee.docx:/app/42ea1332-1e5e-43db-90ac-9ec0b29f1bee.docx:ro
+      - ./zayav.docx:/app/zayav.docx:ro
       - ./templates:/app/templates:ro
     environment:
       - FLASK_ENV=production
