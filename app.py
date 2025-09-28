@@ -3,6 +3,7 @@ from docx import Document
 from datetime import datetime
 import io
 import os
+import copy
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # В продакшене используйте настоящий секретный ключ
@@ -49,55 +50,182 @@ def replace_in_runs_preserve_formatting(paragraph, replacements):
         paragraph._element.remove(run._element)
     
     # Создаем новые runs с сохранением форматирования
-    if new_text:
-        # Находим первое место замены для определения базового форматирования
-        base_formatting = None
-        for placeholder in replacements.keys():
-            if placeholder in original_text:
-                pos = original_text.find(placeholder)
-                if pos < len(char_data):
-                    base_formatting = char_data[pos]
-                    break
-        
-        if not base_formatting and char_data:
-            base_formatting = char_data[0]
-        
-        # Создаем новый run с новым текстом
-        new_run = paragraph.add_run(new_text)
-        
-        # Применяем форматирование
-        if base_formatting:
-            if base_formatting['font_name']:
-                new_run.font.name = base_formatting['font_name']
-            if base_formatting['font_size']:
-                new_run.font.size = base_formatting['font_size']
-            if base_formatting['bold'] is not None:
-                new_run.font.bold = base_formatting['bold']
-            if base_formatting['italic'] is not None:
-                new_run.font.italic = base_formatting['italic']
-            if base_formatting['underline'] is not None:
-                new_run.font.underline = base_formatting['underline']
-            if base_formatting['color']:
-                new_run.font.color.rgb = base_formatting['color']
+    if not new_text:
+        return
+    
+    # Берем форматирование первого символа как базовое
+    base_formatting = char_data[0] if char_data else None
+    
+    # Создаем новый run с базовым форматированием
+    new_run = paragraph.add_run(new_text)
+    
+    if base_formatting:
+        if base_formatting['font_name']:
+            new_run.font.name = base_formatting['font_name']
+        if base_formatting['font_size']:
+            new_run.font.size = base_formatting['font_size']
+        if base_formatting['bold'] is not None:
+            new_run.font.bold = base_formatting['bold']
+        if base_formatting['italic'] is not None:
+            new_run.font.italic = base_formatting['italic']
+        if base_formatting['underline'] is not None:
+            new_run.font.underline = base_formatting['underline']
+        if base_formatting['color']:
+            new_run.font.color.rgb = base_formatting['color']
 
 
-def process_document_in_memory(template_path, replacements):
+def replace_placeholders_advanced(doc, replacements):
+    """
+    Улучшенная замена плейсхолдеров с обработкой всех элементов документа
+    """
+    # Обрабатываем все параграфы
+    for paragraph in doc.paragraphs:
+        replace_in_runs_preserve_formatting(paragraph, replacements)
+    
+    # Обрабатываем таблицы
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                # Обрабатываем каждый параграф в ячейке
+                for paragraph in cell.paragraphs:
+                    replace_in_runs_preserve_formatting(paragraph, replacements)
+    
+    # Обрабатываем заголовки и колонтитулы
+    for section in doc.sections:
+        if section.header:
+            for paragraph in section.header.paragraphs:
+                replace_in_runs_preserve_formatting(paragraph, replacements)
+        if section.footer:
+            for paragraph in section.footer.paragraphs:
+                replace_in_runs_preserve_formatting(paragraph, replacements)
+
+
+def add_creditors_rows_improved(doc, creditors):
+    """
+    Улучшенное добавление строк кредиторов с сохранением форматирования
+    """
+    for table_idx, table in enumerate(doc.tables):
+        # Ищем таблицу с кредиторами (проверяем заголовки)
+        if len(table.rows) > 0:
+            header_row = table.rows[0]
+            header_text = " ".join(cell.text.strip().lower() for cell in header_row.cells)
+            
+            # Если это таблица кредиторов (первая найденная)
+            if "кредитор" in header_text and ("обязательство" in header_text or "денежным обязательствам" in header_text):
+                print(f"Найдена таблица кредиторов с {len(table.rows)} строками")
+                
+                # Находим существующие строки с данными кредиторов (строки 1.1, 1.2 и т.д.)
+                creditor_rows = {}  # {номер_строки: индекс_кредитора}
+                
+                for i, row in enumerate(table.rows):
+                    row_text = " ".join(cell.text.strip() for cell in row.cells)
+                    
+                    # Ищем строки с номерацией 1.1, 1.2 и т.д. (денежные обязательства)
+                    if row_text.startswith("1."):
+                        try:
+                            # Извлекаем номер кредитора (1.1 -> 1, 1.2 -> 2)
+                            creditor_num = int(row_text.split()[0].split('.')[1])
+                            creditor_rows[i] = creditor_num
+                            print(f"Найдена строка кредитора {creditor_num} в позиции {i}")
+                        except (ValueError, IndexError):
+                            pass
+                
+                print(f"Найдено существующих строк кредиторов: {len(creditor_rows)}")
+                
+                # Заменяем существующие строки кредиторов
+                for row_idx, creditor_num in creditor_rows.items():
+                    if creditor_num <= len(creditors):  # Есть данные для замены
+                        creditor = creditors[creditor_num - 1]  # creditor_num начинается с 1
+                        cells = table.rows[row_idx].cells
+                        
+                        if len(cells) >= 8:
+                            cells[0].text = f"1.{creditor_num}"
+                            cells[1].text = creditor.get("Содержание обязательства", "")
+                            cells[2].text = creditor.get("Кредитор", "")
+                            cells[3].text = creditor.get("Место нахождения", "")
+                            cells[4].text = creditor.get("Основание", "")
+                            cells[5].text = creditor.get("Сумма обязательства", "")
+                            cells[6].text = creditor.get("Задолженность", "")
+                            cells[7].text = creditor.get("Штрафы", "")
+                            print(f"Заменен кредитор {creditor_num}: {creditor.get('Кредитор', 'Неизвестно')}")
+                
+                # Если кредиторов больше, чем существующих строк - добавляем новые
+                max_existing_creditor = max(creditor_rows.values()) if creditor_rows else 0
+                
+                if len(creditors) > max_existing_creditor:
+                    print(f"Нужно добавить еще {len(creditors) - max_existing_creditor} кредиторов")
+                    
+                    # Находим и временно сохраняем строки раздела "2. Обязательные платежи"
+                    section_2_rows = []
+                    section_2_start = None
+                    
+                    for i, row in enumerate(table.rows):
+                        row_text = " ".join(cell.text.strip() for cell in row.cells)
+                        
+                        # Если нашли начало раздела 2
+                        if section_2_start is None and (row_text.strip() == "2" or (row_text.strip().startswith("2") and "обязательные платежи" in row_text.lower())):
+                            section_2_start = i
+                            print(f"Найден раздел 2 в позиции {i}")
+                        
+                        # Если мы в разделе 2, сохраняем полную структуру строк
+                        if section_2_start is not None and i >= section_2_start:
+                            # Сохраняем полный XML элемент строки
+                            section_2_rows.append(copy.deepcopy(row._element))
+                    
+                    # Удаляем строки раздела 2 (в обратном порядке)
+                    if section_2_rows:
+                        print(f"Временно удаляем {len(section_2_rows)} строк раздела 2")
+                        for i in range(len(section_2_rows)):
+                            # Удаляем с конца, начиная с section_2_start
+                            row_to_remove = len(table.rows) - 1
+                            if row_to_remove >= section_2_start:
+                                table._element.remove(table.rows[row_to_remove]._element)
+                    
+                    # Теперь добавляем недостающих кредиторов
+                    for i in range(max_existing_creditor, len(creditors)):
+                        creditor = creditors[i]
+                        
+                        # Добавляем строку в конец таблицы (теперь без раздела 2)
+                        new_row = table.add_row()
+                        cells = new_row.cells
+                        
+                        if len(cells) >= 8:
+                            cells[0].text = f"1.{i + 1}"
+                            cells[1].text = creditor.get("Содержание обязательства", "")
+                            cells[2].text = creditor.get("Кредитор", "")
+                            cells[3].text = creditor.get("Место нахождения", "")
+                            cells[4].text = creditor.get("Основание", "")
+                            cells[5].text = creditor.get("Сумма обязательства", "")
+                            cells[6].text = creditor.get("Задолженность", "")
+                            cells[7].text = creditor.get("Штрафы", "")
+                            print(f"Добавлен кредитор {i + 1}: {creditor.get('Кредитор', 'Неизвестно')}")
+                        else:
+                            print(f"Недостаточно ячеек для кредитора {i + 1}: {len(cells)} < 8")
+                    
+                    # Восстанавливаем строки раздела 2 с сохранением оригинальной структуры
+                    if section_2_rows:
+                        print(f"Восстанавливаем {len(section_2_rows)} строк раздела 2")
+                        table_element = table._element
+                        for row_element in section_2_rows:
+                            # Добавляем сохраненный элемент строки обратно в таблицу
+                            table_element.append(row_element)
+                
+                break  # Обработали первую таблицу кредиторов
+
+
+def process_document_in_memory(template_path, replacements, creditors=None):
     """
     Обрабатывает документ в памяти и возвращает байты обработанного документа
     """
     # Загружаем шаблон
     doc = Document(template_path)
     
-    # Обрабатываем абзацы
-    for p in doc.paragraphs:
-        replace_in_runs_preserve_formatting(p, replacements)
+    # Используем улучшенную функцию замены плейсхолдеров
+    replace_placeholders_advanced(doc, replacements)
     
-    # Обрабатываем таблицы
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    replace_in_runs_preserve_formatting(p, replacements)
+    # Если есть данные кредиторов и это документ со списком кредиторов, добавляем их
+    if creditors and template_path.endswith('list-of-creditors.docx'):
+        add_creditors_rows_improved(doc, creditors)
     
     # Сохраняем документ в память
     doc_io = io.BytesIO()
@@ -114,15 +242,29 @@ def index():
         surname = request.form.get('surname', '').strip()
         name = request.form.get('name', '').strip()
         patronymic = request.form.get('patronymic', '').strip()
+        birth_date = request.form.get('birth_date', '').strip()
+        birth_place = request.form.get('birth_place', '').strip()
         passport_data = request.form.get('passport_data', '').strip()
-        registered_address = request.form.get('registered_address', '').strip()
         inn = request.form.get('inn', '').strip()
         snils = request.form.get('snils', '').strip()
+        
+        # Получаем данные адреса
+        region = request.form.get('region', '').strip()
+        city = request.form.get('city', '').strip()
+        street = request.form.get('street', '').strip()
+        house_number = request.form.get('house_number', '').strip()
+        building_number = request.form.get('building_number', '').strip()
+        apartment_number = request.form.get('apartment_number', '').strip()
+        registered_address = request.form.get('registered_address', '').strip()
+        
+        # Получаем данные о долге
         debt_amount_digits = request.form.get('debt_amount_digits', '').strip()
         debt_amount_words = request.form.get('debt_amount_words', '').strip()
         
         # Валидация основных полей
-        required_fields = [surname, name, patronymic, passport_data, registered_address, inn, snils, debt_amount_digits, debt_amount_words]
+        required_fields = [surname, name, patronymic, birth_date, birth_place, passport_data, 
+                          inn, snils, region, street, house_number, registered_address,
+                          debt_amount_digits, debt_amount_words]
         if not all(required_fields):
             flash('Все основные поля обязательны для заполнения', 'error')
             return redirect(url_for('index'))
@@ -131,23 +273,39 @@ def index():
             flash('ИНН должен содержать ровно 12 цифр', 'error')
             return redirect(url_for('index'))
         
-        # Получаем данные о кредиторах
+        # Получаем данные о кредиторах с детальной информацией
         creditors = []
         creditor_num = 1
         while True:
             creditor_name = request.form.get(f'creditor_name_{creditor_num}', '').strip()
             creditor_address = request.form.get(f'creditor_address_{creditor_num}', '').strip()
+            obligation_content = request.form.get(f'obligation_content_{creditor_num}', '').strip()
+            obligation_basis = request.form.get(f'obligation_basis_{creditor_num}', '').strip()
+            obligation_amount = request.form.get(f'obligation_amount_{creditor_num}', '').strip()
+            debt_amount = request.form.get(f'debt_amount_{creditor_num}', '').strip()
+            penalties = request.form.get(f'penalties_{creditor_num}', '').strip()
             
+            # Если основные поля кредитора пусты, прекращаем поиск
             if not creditor_name and not creditor_address:
                 break
             
-            if not creditor_name or not creditor_address:
+            # Проверяем, что все поля кредитора заполнены
+            creditor_fields = [creditor_name, creditor_address, obligation_content, 
+                              obligation_basis, obligation_amount, debt_amount, penalties]
+            if not all(creditor_fields):
                 flash(f'Заполните все поля для кредитора {creditor_num}', 'error')
                 return redirect(url_for('index'))
             
             creditors.append({
                 'name': creditor_name,
-                'address': creditor_address
+                'address': creditor_address,
+                'Содержание обязательства': obligation_content,
+                'Кредитор': creditor_name,
+                'Место нахождения': creditor_address,
+                'Основание': obligation_basis,
+                'Сумма обязательства': obligation_amount,
+                'Задолженность': debt_amount,
+                'Штрафы': penalties
             })
             creditor_num += 1
         
@@ -170,30 +328,75 @@ def index():
             ]
             month_name = months_ru[current_date.month]
             
-            # Подготавливаем основные замены
+            # Форматируем дату рождения
+            try:
+                birth_date_obj = datetime.strptime(birth_date, '%Y-%m-%d')
+                formatted_birth_date = birth_date_obj.strftime('%d.%m.%Y')
+            except ValueError:
+                formatted_birth_date = birth_date
+            
+            # Подготавливаем основные замены (включая новые поля из list-of-creditors-final.py)
             replacements = {
+                # Основные персональные данные
                 "{Фамилия}": surname,
+                "{фамилия}": surname,
+                "{фамилия} ": surname + " ",
                 "{Имя}": name,
+                "{имя}": name,
                 "{Отчество}": patronymic,
+                "{отчество}": patronymic,
+                "{дата рождения}": formatted_birth_date,
+                "{место рождения}": birth_place,
                 "{паспортные данные}": passport_data,
-                "{Зарегистрирован по адресу}": registered_address,
+                "{серия и номер паспорта}": passport_data,
                 "{ИНН}": inn,
                 "{СНИЛС}": snils,
+                
+                # Детализированный адрес
+                "{субъект РФ}": region,
+                "{населенный пункт}": city,
+                "{улица}": street,
+                "{номер дома}": house_number,
+                "{номер корпуса (может быть пустым)}": building_number,
+                "{номер квартиры может быть пустым}": apartment_number,
+                "{Зарегистрирован по адресу}": registered_address,
+                
+                # Финансовая информация
                 "{сумма долга цифрами}": debt_amount_digits,
                 "{сумма долга буквами}": debt_amount_words,
+                
+                # Дата и подпись
                 "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
+                "{дата}": current_date.strftime("%d.%m.%Y"),
                 "{число месяца}": str(current_date.day),
                 "{месяц}": month_name,
                 "{год}": str(current_date.year),
                 "{Первая буква имени}": first_letter_name,
-                "{первая буква отчества}": first_letter_patronymic
+                "{первая буква отчества}": first_letter_patronymic,
+                "{Фамилия и первые буквы имени и отчества}": f"{surname} {first_letter_name}.{first_letter_patronymic}.",
+                
+                # Кредиторы (общие плейсхолдеры)
+                "{Наименование кредитора}": creditors[0]['name'] if creditors else "",
+                "{Почтовый индекс и адрес}": creditors[0]['address'] if creditors else "",
+                "{место нахождения кредитора}": creditors[0]['address'] if creditors else "",
+                "{основание возникновения}": creditors[0]['Основание'] if creditors else "",
+                "{сумма обязательства}": creditors[0]['Сумма обязательства'] if creditors else "",
+                "{сумма задолженности}": creditors[0]['Задолженность'] if creditors else "",
+                "{штрафы + пени}": creditors[0]['Штрафы'] if creditors else "",
             }
             
-            # Добавляем замены для кредиторов
-            # Для первого кредитора используем общие плейсхолдеры
-            if creditors:
-                replacements["{Наименование кредитора}"] = creditors[0]['name']
-                replacements["{Почтовый индекс и адрес}"] = creditors[0]['address']
+            # Добавляем замены для первых кредиторов (из оригинального кода)
+            if len(creditors) >= 1:
+                replacements.update({
+                    "{кредит1}": creditors[0]['Содержание обязательства'],
+                    "{кредитор1}": creditors[0]['Кредитор'],
+                })
+            
+            if len(creditors) >= 2:
+                replacements.update({
+                    "{кредит2}": creditors[1]['Содержание обязательства'],
+                    "{кредитор2}": creditors[1]['Кредитор'],
+                })
             
             # Добавляем замены для всех кредиторов с номерами
             for i, creditor in enumerate(creditors, 1):
@@ -208,10 +411,14 @@ def index():
                 flash('Файл шаблона не найден', 'error')
                 return redirect(url_for('index'))
             
-            processed_doc = process_document_in_memory(template_path, replacements)
-            
-            # Формируем имя файла
-            filename = f"bankruptcy_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
+            # Проверяем, есть ли шаблон списка кредиторов
+            creditors_template_path = "list-of-creditors.docx"
+            if os.path.exists(creditors_template_path):
+                processed_doc = process_document_in_memory(creditors_template_path, replacements, creditors)
+                filename = f"list_of_creditors_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
+            else:
+                processed_doc = process_document_in_memory(template_path, replacements, creditors)
+                filename = f"bankruptcy_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
             
             # Отправляем файл для скачивания
             return send_file(
