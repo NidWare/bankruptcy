@@ -4,6 +4,7 @@ from datetime import datetime
 import io
 import os
 import copy
+import zipfile
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # В продакшене используйте настоящий секретный ключ
@@ -235,6 +236,45 @@ def process_document_in_memory(template_path, replacements, creditors=None):
     return doc_io
 
 
+def generate_documents_archive(replacements, creditors, surname, name, current_date):
+    """
+    Генерирует оба документа (заявление о банкротстве и список кредиторов) 
+    и возвращает ZIP-архив с обоими файлами
+    """
+    # Создаем ZIP-архив в памяти
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # Генерируем заявление о банкротстве
+        bankruptcy_template = "zayav.docx"
+        if os.path.exists(bankruptcy_template):
+            try:
+                bankruptcy_doc = process_document_in_memory(bankruptcy_template, replacements)
+                bankruptcy_filename = f"bankruptcy_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
+                zip_file.writestr(bankruptcy_filename, bankruptcy_doc.getvalue())
+                print(f"✅ Создано заявление о банкротстве: {bankruptcy_filename}")
+            except Exception as e:
+                print(f"❌ Ошибка при создании заявления о банкротстве: {e}")
+        else:
+            print("⚠️ Шаблон заявления о банкротстве (zayav.docx) не найден")
+        
+        # Генерируем список кредиторов
+        creditors_template = "list-of-creditors.docx"
+        if os.path.exists(creditors_template):
+            try:
+                creditors_doc = process_document_in_memory(creditors_template, replacements, creditors)
+                creditors_filename = f"list_of_creditors_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
+                zip_file.writestr(creditors_filename, creditors_doc.getvalue())
+                print(f"✅ Создан список кредиторов: {creditors_filename}")
+            except Exception as e:
+                print(f"❌ Ошибка при создании списка кредиторов: {e}")
+        else:
+            print("⚠️ Шаблон списка кредиторов (list-of-creditors.docx) не найден")
+    
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -405,27 +445,23 @@ def index():
                 if i > 1:
                     replacements[f"{{Кредитор n+{i-1}}}"] = f"Кредитор {i}"
             
-            # Обрабатываем документ
-            template_path = "zayav.docx"
-            if not os.path.exists(template_path):
-                flash('Файл шаблона не найден', 'error')
+            # Проверяем наличие хотя бы одного шаблона
+            bankruptcy_template = "zayav.docx"
+            creditors_template = "list-of-creditors.docx"
+            
+            if not os.path.exists(bankruptcy_template) and not os.path.exists(creditors_template):
+                flash('Файлы шаблонов не найдены', 'error')
                 return redirect(url_for('index'))
             
-            # Проверяем, есть ли шаблон списка кредиторов
-            creditors_template_path = "list-of-creditors.docx"
-            if os.path.exists(creditors_template_path):
-                processed_doc = process_document_in_memory(creditors_template_path, replacements, creditors)
-                filename = f"list_of_creditors_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
-            else:
-                processed_doc = process_document_in_memory(template_path, replacements, creditors)
-                filename = f"bankruptcy_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
+            # Создаем ZIP-архив с обоими документами
+            zip_buffer = generate_documents_archive(replacements, creditors, surname, name, current_date)
+            filename = f"bankruptcy_documents_{surname}_{name}_{current_date.strftime('%Y%m%d')}.zip"
             
-            # Отправляем файл для скачивания
             return send_file(
-                processed_doc,
+                zip_buffer,
                 as_attachment=True,
                 download_name=filename,
-                mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                mimetype='application/zip'
             )
             
         except Exception as e:
