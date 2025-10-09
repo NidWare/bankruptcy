@@ -236,6 +236,36 @@ def process_document_in_memory(template_path, replacements, creditors=None):
     return doc_io
 
 
+def format_amount(amount_str):
+    """
+    Форматирует сумму в формат с разделителями тысяч и копейками
+    Пример: "1000000" -> "1 000 000,00"
+    """
+    try:
+        # Удаляем все пробелы и запятые
+        amount_str = amount_str.replace(' ', '').replace(',', '.').replace('\xa0', '')
+        amount = float(amount_str)
+        # Форматируем с двумя знаками после запятой
+        formatted = f"{amount:,.2f}".replace(',', ' ').replace('.', ',')
+        return formatted
+    except (ValueError, AttributeError):
+        return amount_str
+
+
+def calculate_total_debt(creditors):
+    """
+    Вычисляет общую сумму задолженности из всех кредиторов
+    """
+    total = 0.0
+    for creditor in creditors:
+        try:
+            debt = creditor.get('Задолженность', '0').replace(' ', '').replace(',', '.').replace('\xa0', '')
+            total += float(debt)
+        except (ValueError, AttributeError):
+            pass
+    return total
+
+
 def generate_initial_documents_archive(replacements, creditors, surname, name, current_date):
     """
     Генерирует первоначальные документы (БЕЗ номера дела):
@@ -356,9 +386,18 @@ def initial_documents():
         surname = request.form.get('surname', '').strip()
         name = request.form.get('name', '').strip()
         patronymic = request.form.get('patronymic', '').strip()
+        surname_genitive = request.form.get('surname_genitive', '').strip()  # Родительный падеж
+        name_genitive = request.form.get('name_genitive', '').strip()
+        patronymic_genitive = request.form.get('patronymic_genitive', '').strip()
+        surname_dative = request.form.get('surname_dative', '').strip()  # Дательный падеж
+        name_dative = request.form.get('name_dative', '').strip()
+        patronymic_dative = request.form.get('patronymic_dative', '').strip()
         birth_date = request.form.get('birth_date', '').strip()
         birth_place = request.form.get('birth_place', '').strip()
-        passport_data = request.form.get('passport_data', '').strip()
+        passport_series = request.form.get('passport_series', '').strip()
+        passport_number = request.form.get('passport_number', '').strip()
+        passport_issued_by = request.form.get('passport_issued_by', '').strip()
+        passport_issue_date = request.form.get('passport_issue_date', '').strip()
         inn = request.form.get('inn', '').strip()
         snils = request.form.get('snils', '').strip()
         
@@ -381,7 +420,10 @@ def initial_documents():
         judge_name = request.form.get('judge_name', '').strip()
         
         # Валидация основных полей
-        required_fields = [surname, name, patronymic, birth_date, birth_place, passport_data, 
+        required_fields = [surname, name, patronymic, surname_genitive, name_genitive, 
+                          patronymic_genitive, surname_dative, name_dative, patronymic_dative,
+                          birth_date, birth_place, passport_series, passport_number,
+                          passport_issued_by, passport_issue_date,
                           inn, snils, region, street, house_number, registered_address,
                           debt_amount_digits, debt_amount_words]
         if not all(required_fields):
@@ -454,12 +496,34 @@ def initial_documents():
             except ValueError:
                 formatted_birth_date = birth_date
             
-            # Формируем полное ФИО должника
+            # Форматируем дату выдачи паспорта
+            try:
+                passport_issue_date_obj = datetime.strptime(passport_issue_date, '%Y-%m-%d')
+                formatted_passport_issue_date = passport_issue_date_obj.strftime('%d.%m.%Y')
+            except ValueError:
+                formatted_passport_issue_date = passport_issue_date
+            
+            # Формируем полное ФИО должника в разных падежах
             full_name = f"{surname} {name} {patronymic}"
+            full_name_genitive = f"{surname_genitive} {name_genitive} {patronymic_genitive}"
+            full_name_dative = f"{surname_dative} {name_dative} {patronymic_dative}"
+            
+            # Формируем паспортные данные
+            passport_full = f"{passport_series} {passport_number}"
+            
+            # Формируем полную строку с датой рождения и местом рождения
+            birth_info = f"{formatted_birth_date} г.р., место рождения: {birth_place}"
+            
+            # Формируем полную строку с паспортными данными
+            passport_info = f"Паспорт РФ {passport_full}\nВыдан {passport_issued_by}\nдата выдачи: {formatted_passport_issue_date}"
+            
+            # Вычисляем общую сумму задолженности
+            total_debt = calculate_total_debt(creditors)
+            formatted_total_debt = format_amount(str(total_debt))
             
             # Подготавливаем основные замены (включая новые поля из list-of-creditors-final.py)
             replacements = {
-                # Основные персональные данные
+                # Основные персональные данные (именительный падеж)
                 "{Фамилия}": surname,
                 "{Фамилия} ": surname + " ",
                 "{фамилия}": surname,
@@ -468,11 +532,36 @@ def initial_documents():
                 "{имя}": name,
                 "{Отчество}": patronymic,
                 "{отчество}": patronymic,
+                "{ФИО}": full_name,
+                "{ФИО должника}": full_name,
+                
+                # ФИО в родительном падеже (кого? чего?)
+                "{Фамилия родительный}": surname_genitive,
+                "{Имя родительный}": name_genitive,
+                "{Отчество родительный}": patronymic_genitive,
+                "{ФИО родительный}": full_name_genitive,
+                
+                # ФИО в дательном падеже (кому? чему?)
+                "{Фамилия дательный}": surname_dative,
+                "{Имя дательный}": name_dative,
+                "{Отчество дательный}": patronymic_dative,
+                "{ФИО дательный}": full_name_dative,
+                
+                # Дата и место рождения
                 "{дата рождения}": formatted_birth_date,
                 "{dd.mm.yyyy дата рождения}": formatted_birth_date,
                 "{место рождения}": birth_place,
-                "{паспортные данные}": passport_data,
-                "{серия и номер паспорта}": passport_data,
+                "{дата и место рождения}": birth_info,
+                
+                # Паспортные данные
+                "{паспортные данные}": passport_info,
+                "{серия и номер паспорта}": passport_full,
+                "{паспорт серия}": passport_series,
+                "{паспорт номер}": passport_number,
+                "{паспорт кем выдан}": passport_issued_by,
+                "{паспорт дата выдачи}": formatted_passport_issue_date,
+                
+                # ИНН и СНИЛС
                 "{ИНН}": inn,
                 "{СНИЛС}": snils,
                 
@@ -492,6 +581,8 @@ def initial_documents():
                 # Финансовая информация
                 "{сумма долга цифрами}": debt_amount_digits,
                 "{сумма долга буквами}": debt_amount_words,
+                "{общая сумма задолженности}": f"{formatted_total_debt} рублей",
+                "{сумма требований}": formatted_total_debt,
                 
                 # Дата и подпись
                 "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
@@ -513,13 +604,11 @@ def initial_documents():
                 "{СНИЛС ДОЛЖНИКА}": snils,
                 "{номер дела}": case_number if case_number else "",
                 "{месторасположение должника}": registered_address,
-                "{сумма требований к должнику}": f"{debt_amount_digits} ({debt_amount_words})",
+                "{сумма требований к должнику}": f"{formatted_total_debt} рублей",
                 
                 # Плейсхолдеры для заявления от СРО
                 "{дело}": case_number if case_number else "",
                 "{судья}": judge_name if judge_name else "",
-                "{ФИО}": full_name,
-                "{ФИО должника}": full_name,
                 
                 # Кредиторы (общие плейсхолдеры)
                 "{Наименование кредитора}": creditors[0]['name'] if creditors else "",
@@ -586,9 +675,18 @@ def case_documents():
         surname = request.form.get('surname', '').strip()
         name = request.form.get('name', '').strip()
         patronymic = request.form.get('patronymic', '').strip()
+        surname_genitive = request.form.get('surname_genitive', '').strip()
+        name_genitive = request.form.get('name_genitive', '').strip()
+        patronymic_genitive = request.form.get('patronymic_genitive', '').strip()
+        surname_dative = request.form.get('surname_dative', '').strip()
+        name_dative = request.form.get('name_dative', '').strip()
+        patronymic_dative = request.form.get('patronymic_dative', '').strip()
         birth_date = request.form.get('birth_date', '').strip()
         birth_place = request.form.get('birth_place', '').strip()
-        passport_data = request.form.get('passport_data', '').strip()
+        passport_series = request.form.get('passport_series', '').strip()
+        passport_number = request.form.get('passport_number', '').strip()
+        passport_issued_by = request.form.get('passport_issued_by', '').strip()
+        passport_issue_date = request.form.get('passport_issue_date', '').strip()
         inn = request.form.get('inn', '').strip()
         snils = request.form.get('snils', '').strip()
         
@@ -611,7 +709,10 @@ def case_documents():
         judge_name = request.form.get('judge_name', '').strip()
         
         # Валидация основных полей + обязательные номер дела и судья
-        required_fields = [surname, name, patronymic, birth_date, birth_place, passport_data, 
+        required_fields = [surname, name, patronymic, surname_genitive, name_genitive,
+                          patronymic_genitive, surname_dative, name_dative, patronymic_dative,
+                          birth_date, birth_place, passport_series, passport_number,
+                          passport_issued_by, passport_issue_date,
                           inn, snils, region, street, house_number, registered_address,
                           debt_amount_digits, debt_amount_words, case_number, judge_name]
         if not all(required_fields):
@@ -672,17 +773,41 @@ def case_documents():
             ]
             month_name = months_ru[current_date.month]
             
+            # Форматируем дату рождения
             try:
                 birth_date_obj = datetime.strptime(birth_date, '%Y-%m-%d')
                 formatted_birth_date = birth_date_obj.strftime('%d.%m.%Y')
             except ValueError:
                 formatted_birth_date = birth_date
             
+            # Форматируем дату выдачи паспорта
+            try:
+                passport_issue_date_obj = datetime.strptime(passport_issue_date, '%Y-%m-%d')
+                formatted_passport_issue_date = passport_issue_date_obj.strftime('%d.%m.%Y')
+            except ValueError:
+                formatted_passport_issue_date = passport_issue_date
+            
+            # Формируем полное ФИО должника в разных падежах
             full_name = f"{surname} {name} {patronymic}"
+            full_name_genitive = f"{surname_genitive} {name_genitive} {patronymic_genitive}"
+            full_name_dative = f"{surname_dative} {name_dative} {patronymic_dative}"
+            
+            # Формируем паспортные данные
+            passport_full = f"{passport_series} {passport_number}"
+            
+            # Формируем полную строку с датой рождения и местом рождения
+            birth_info = f"{formatted_birth_date} г.р., место рождения: {birth_place}"
+            
+            # Формируем полную строку с паспортными данными
+            passport_info = f"Паспорт РФ {passport_full}\nВыдан {passport_issued_by}\nдата выдачи: {formatted_passport_issue_date}"
+            
+            # Вычисляем общую сумму задолженности
+            total_debt = calculate_total_debt(creditors)
+            formatted_total_debt = format_amount(str(total_debt))
             
             # Подготавливаем замены
             replacements = {
-                # Основные персональные данные
+                # Основные персональные данные (именительный падеж)
                 "{Фамилия}": surname,
                 "{Фамилия} ": surname + " ",
                 "{фамилия}": surname,
@@ -691,11 +816,36 @@ def case_documents():
                 "{имя}": name,
                 "{Отчество}": patronymic,
                 "{отчество}": patronymic,
+                "{ФИО}": full_name,
+                "{ФИО должника}": full_name,
+                
+                # ФИО в родительном падеже (кого? чего?)
+                "{Фамилия родительный}": surname_genitive,
+                "{Имя родительный}": name_genitive,
+                "{Отчество родительный}": patronymic_genitive,
+                "{ФИО родительный}": full_name_genitive,
+                
+                # ФИО в дательном падеже (кому? чему?)
+                "{Фамилия дательный}": surname_dative,
+                "{Имя дательный}": name_dative,
+                "{Отчество дательный}": patronymic_dative,
+                "{ФИО дательный}": full_name_dative,
+                
+                # Дата и место рождения
                 "{дата рождения}": formatted_birth_date,
                 "{dd.mm.yyyy дата рождения}": formatted_birth_date,
                 "{место рождения}": birth_place,
-                "{паспортные данные}": passport_data,
-                "{серия и номер паспорта}": passport_data,
+                "{дата и место рождения}": birth_info,
+                
+                # Паспортные данные
+                "{паспортные данные}": passport_info,
+                "{серия и номер паспорта}": passport_full,
+                "{паспорт серия}": passport_series,
+                "{паспорт номер}": passport_number,
+                "{паспорт кем выдан}": passport_issued_by,
+                "{паспорт дата выдачи}": formatted_passport_issue_date,
+                
+                # ИНН и СНИЛС
                 "{ИНН}": inn,
                 "{СНИЛС}": snils,
                 
@@ -715,6 +865,8 @@ def case_documents():
                 # Финансовая информация
                 "{сумма долга цифрами}": debt_amount_digits,
                 "{сумма долга буквами}": debt_amount_words,
+                "{общая сумма задолженности}": f"{formatted_total_debt} рублей",
+                "{сумма требований}": formatted_total_debt,
                 
                 # Дата и подпись
                 "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
@@ -736,13 +888,11 @@ def case_documents():
                 "{СНИЛС ДОЛЖНИКА}": snils,
                 "{номер дела}": case_number,
                 "{месторасположение должника}": registered_address,
-                "{сумма требований к должнику}": f"{debt_amount_digits} ({debt_amount_words})",
+                "{сумма требований к должнику}": f"{formatted_total_debt} рублей",
                 
                 # Плейсхолдеры для заявления от СРО и Agreement
                 "{дело}": case_number,
                 "{судья}": judge_name,
-                "{ФИО}": full_name,
-                "{ФИО должника}": full_name,
                 
                 # Кредиторы
                 "{Наименование кредитора}": creditors[0]['name'] if creditors else "",
