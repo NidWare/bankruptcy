@@ -133,6 +133,9 @@ def add_creditors_rows_improved(doc, creditors):
                 
                 print(f"Найдено существующих строк кредиторов: {len(creditor_rows)}")
                 
+                # Список строк для удаления (если кредиторов меньше, чем строк в шаблоне)
+                rows_to_delete = []
+                
                 # Заменяем существующие строки кредиторов
                 for row_idx, creditor_num in creditor_rows.items():
                     if creditor_num <= len(creditors):  # Есть данные для замены
@@ -145,10 +148,15 @@ def add_creditors_rows_improved(doc, creditors):
                             cells[2].text = creditor.get("Кредитор", "")
                             cells[3].text = creditor.get("Место нахождения", "")
                             cells[4].text = creditor.get("Основание", "")
-                            cells[5].text = creditor.get("Сумма обязательства", "")
-                            cells[6].text = creditor.get("Задолженность", "")
-                            cells[7].text = creditor.get("Штрафы", "")
+                            # Форматируем числовые значения с пробелами
+                            cells[5].text = format_amount(creditor.get("Сумма обязательства", ""))
+                            cells[6].text = format_amount(creditor.get("Задолженность", ""))
+                            cells[7].text = format_amount(creditor.get("Штрафы", ""))
                             print(f"Заменен кредитор {creditor_num}: {creditor.get('Кредитор', 'Неизвестно')}")
+                    else:
+                        # Кредитора нет - нужно удалить эту строку
+                        rows_to_delete.append(row_idx)
+                        print(f"Строка кредитора {creditor_num} в позиции {row_idx} будет удалена (нет данных)")
                 
                 # Если кредиторов больше, чем существующих строк - добавляем новые
                 max_existing_creditor = max(creditor_rows.values()) if creditor_rows else 0
@@ -196,9 +204,10 @@ def add_creditors_rows_improved(doc, creditors):
                             cells[2].text = creditor.get("Кредитор", "")
                             cells[3].text = creditor.get("Место нахождения", "")
                             cells[4].text = creditor.get("Основание", "")
-                            cells[5].text = creditor.get("Сумма обязательства", "")
-                            cells[6].text = creditor.get("Задолженность", "")
-                            cells[7].text = creditor.get("Штрафы", "")
+                            # Форматируем числовые значения с пробелами
+                            cells[5].text = format_amount(creditor.get("Сумма обязательства", ""))
+                            cells[6].text = format_amount(creditor.get("Задолженность", ""))
+                            cells[7].text = format_amount(creditor.get("Штрафы", ""))
                             print(f"Добавлен кредитор {i + 1}: {creditor.get('Кредитор', 'Неизвестно')}")
                         else:
                             print(f"Недостаточно ячеек для кредитора {i + 1}: {len(cells)} < 8")
@@ -210,6 +219,12 @@ def add_creditors_rows_improved(doc, creditors):
                         for row_element in section_2_rows:
                             # Добавляем сохраненный элемент строки обратно в таблицу
                             table_element.append(row_element)
+                
+                # Удаляем лишние строки кредиторов (если кредиторов меньше, чем было в шаблоне)
+                # Удаляем в обратном порядке, чтобы индексы не сбивались
+                for row_idx in sorted(rows_to_delete, reverse=True):
+                    print(f"Удаляем лишнюю строку кредитора в позиции {row_idx}")
+                    table._element.remove(table.rows[row_idx]._element)
                 
                 break  # Обработали первую таблицу кредиторов
 
@@ -414,6 +429,11 @@ def initial_documents():
         # Получаем данные о долге
         debt_amount_digits = request.form.get('debt_amount_digits', '').strip()
         debt_amount_words = request.form.get('debt_amount_words', '').strip()
+        
+        # Получаем данные о госпошлине (по умолчанию 300 рублей для банкротства физлиц)
+        state_duty = request.form.get('state_duty', '300').strip()
+        if not state_duty:
+            state_duty = '300'
         
         # Получаем данные о деле и судье (для документа СРО)
         case_number = request.form.get('case_number', '').strip()
