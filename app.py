@@ -233,6 +233,12 @@ def process_document_in_memory(template_path, replacements, creditors=None):
     """
     Обрабатывает документ в памяти и возвращает байты обработанного документа
     """
+    # Проверяем формат файла
+    if template_path.endswith('.doc') and not template_path.endswith('.docx'):
+        raise ValueError(f"Файл '{template_path}' имеет старый формат .doc. "
+                        f"Пожалуйста, откройте его в Microsoft Word и сохраните как .docx формат, "
+                        f"либо используйте LibreOffice для конвертации.")
+    
     # Загружаем шаблон
     doc = Document(template_path)
     
@@ -358,8 +364,14 @@ def generate_case_documents_archive(replacements, creditors, surname, name, curr
             print("⚠️ Шаблон информационного сообщения (inform-message.docx) не найден")
         
         # Генерируем заявление от СРО
-        sro_template = "zayavSRO.doc"
-        if os.path.exists(sro_template):
+        # Сначала проверяем .docx формат, затем .doc
+        sro_template = None
+        if os.path.exists("zayavSRO.docx"):
+            sro_template = "zayavSRO.docx"
+        elif os.path.exists("zayavSRO.doc"):
+            sro_template = "zayavSRO.doc"
+        
+        if sro_template:
             try:
                 sro_doc = process_document_in_memory(sro_template, replacements)
                 sro_filename = f"sro_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
@@ -368,7 +380,7 @@ def generate_case_documents_archive(replacements, creditors, surname, name, curr
             except Exception as e:
                 print(f"❌ Ошибка при создании заявления от СРО: {e}")
         else:
-            print("⚠️ Шаблон заявления от СРО (zayavSRO.doc) не найден")
+            print("⚠️ Шаблон заявления от СРО (zayavSRO.docx или zayavSRO.doc) не найден")
         
         # Генерируем заявление о согласии арбитражного управляющего
         agreement_template = "zayavAgreement.docx"
