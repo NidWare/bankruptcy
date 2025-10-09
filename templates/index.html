@@ -245,10 +245,11 @@
 
         <div class="info-box">
             <strong>Информация:</strong>
-            Система автоматически создаст два документа: заявление о банкротстве и детальный список кредиторов. 
+            Система автоматически создаст четыре документа: заявление о банкротстве, детальный список кредиторов, 
+            информационное сообщение и заявление от СРО. 
             Документы будут упакованы в ZIP-архив для скачивания. 
             Дата в документах будет автоматически установлена на сегодняшнее число.
-            Все поля обязательны для заполнения.
+            Все основные поля обязательны для заполнения (кроме данных о деле и судье).
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -403,6 +404,25 @@
                     <input type="text" id="debt_amount_words" name="debt_amount_words" required 
                            value="{{ request.form.debt_amount_words if request.form.debt_amount_words }}"
                            placeholder="пятьсот тысяч рублей 00 копеек">
+                </div>
+            </div>
+
+            <!-- Информация о деле и судье -->
+            <div class="form-section">
+                <h3>⚖️ Информация о деле (опционально)</h3>
+                
+                <div class="form-group">
+                    <label for="case_number">Номер дела</label>
+                    <input type="text" id="case_number" name="case_number" 
+                           value="{{ request.form.case_number if request.form.case_number }}"
+                           placeholder="А41-74680/2025">
+                </div>
+
+                <div class="form-group">
+                    <label for="judge_name">ФИО судьи</label>
+                    <input type="text" id="judge_name" name="judge_name" 
+                           value="{{ request.form.judge_name if request.form.judge_name }}"
+                           placeholder="Иванова И.И.">
                 </div>
             </div>
 

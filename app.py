@@ -238,8 +238,8 @@ def process_document_in_memory(template_path, replacements, creditors=None):
 
 def generate_documents_archive(replacements, creditors, surname, name, current_date):
     """
-    Генерирует оба документа (заявление о банкротстве и список кредиторов) 
-    и возвращает ZIP-архив с обоими файлами
+    Генерирует все документы (заявление о банкротстве, список кредиторов и информационное сообщение) 
+    и возвращает ZIP-архив со всеми файлами
     """
     # Создаем ZIP-архив в памяти
     zip_buffer = io.BytesIO()
@@ -270,6 +270,32 @@ def generate_documents_archive(replacements, creditors, surname, name, current_d
                 print(f"❌ Ошибка при создании списка кредиторов: {e}")
         else:
             print("⚠️ Шаблон списка кредиторов (list-of-creditors.docx) не найден")
+        
+        # Генерируем информационное сообщение
+        inform_template = "inform-message.docx"
+        if os.path.exists(inform_template):
+            try:
+                inform_doc = process_document_in_memory(inform_template, replacements)
+                inform_filename = f"inform_message_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
+                zip_file.writestr(inform_filename, inform_doc.getvalue())
+                print(f"✅ Создано информационное сообщение: {inform_filename}")
+            except Exception as e:
+                print(f"❌ Ошибка при создании информационного сообщения: {e}")
+        else:
+            print("⚠️ Шаблон информационного сообщения (inform-message.docx) не найден")
+        
+        # Генерируем заявление от СРО
+        sro_template = "zayavSRO.doc"
+        if os.path.exists(sro_template):
+            try:
+                sro_doc = process_document_in_memory(sro_template, replacements)
+                sro_filename = f"sro_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
+                zip_file.writestr(sro_filename, sro_doc.getvalue())
+                print(f"✅ Создано заявление от СРО: {sro_filename}")
+            except Exception as e:
+                print(f"❌ Ошибка при создании заявления от СРО: {e}")
+        else:
+            print("⚠️ Шаблон заявления от СРО (zayavSRO.doc) не найден")
     
     zip_buffer.seek(0)
     return zip_buffer
@@ -300,6 +326,10 @@ def index():
         # Получаем данные о долге
         debt_amount_digits = request.form.get('debt_amount_digits', '').strip()
         debt_amount_words = request.form.get('debt_amount_words', '').strip()
+        
+        # Получаем данные о деле и судье (для документа СРО)
+        case_number = request.form.get('case_number', '').strip()
+        judge_name = request.form.get('judge_name', '').strip()
         
         # Валидация основных полей
         required_fields = [surname, name, patronymic, birth_date, birth_place, passport_data, 
@@ -375,6 +405,9 @@ def index():
             except ValueError:
                 formatted_birth_date = birth_date
             
+            # Формируем полное ФИО должника
+            full_name = f"{surname} {name} {patronymic}"
+            
             # Подготавливаем основные замены (включая новые поля из list-of-creditors-final.py)
             replacements = {
                 # Основные персональные данные
@@ -407,6 +440,7 @@ def index():
                 
                 # Дата и подпись
                 "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
+                "{dd}.{mm}.{yyyy}г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year}г.",
                 "{дата}": current_date.strftime("%d.%m.%Y"),
                 "{число месяца}": str(current_date.day),
                 "{месяц}": month_name,
@@ -414,6 +448,18 @@ def index():
                 "{Первая буква имени}": first_letter_name,
                 "{первая буква отчества}": first_letter_patronymic,
                 "{Фамилия и первые буквы имени и отчества}": f"{surname} {first_letter_name}.{first_letter_patronymic}.",
+                
+                # Плейсхолдеры для информационного сообщения
+                "{ИНН ДОЛЖНИКА}": inn,
+                "{СНИЛС ДОЛЖНИКА}": snils,
+                "{номер дела}": case_number if case_number else "",
+                "{месторасположение должника}": registered_address,
+                "{сумма требований к должнику}": f"{debt_amount_digits} ({debt_amount_words})",
+                
+                # Плейсхолдеры для заявления от СРО
+                "{дело}": case_number if case_number else "",
+                "{судья}": judge_name if judge_name else "",
+                "{ФИО}": full_name,
                 
                 # Кредиторы (общие плейсхолдеры)
                 "{Наименование кредитора}": creditors[0]['name'] if creditors else "",
