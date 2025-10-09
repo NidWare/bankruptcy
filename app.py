@@ -273,6 +273,27 @@ def format_amount(amount_str):
         return amount_str
 
 
+def format_judge_name(full_name):
+    """
+    Форматирует полное ФИО судьи в формат "Фамилия И.О."
+    Пример: "Иванова Мария Петровна" -> "Иванова М.П."
+    """
+    if not full_name:
+        return ""
+    
+    parts = full_name.strip().split()
+    if len(parts) == 0:
+        return ""
+    elif len(parts) == 1:
+        return parts[0]  # Только фамилия
+    elif len(parts) == 2:
+        # Фамилия Имя
+        return f"{parts[0]} {parts[1][0]}."
+    else:
+        # Фамилия Имя Отчество
+        return f"{parts[0]} {parts[1][0]}.{parts[2][0]}."
+
+
 def calculate_total_debt(creditors):
     """
     Вычисляет общую сумму задолженности из всех кредиторов
@@ -340,12 +361,14 @@ def generate_initial_documents_archive(replacements, creditors, surname, name, c
     return zip_buffer
 
 
-def generate_case_documents_archive(replacements, creditors, surname, name, current_date):
+def generate_case_documents_archive(replacements, surname, name, current_date):
     """
     Генерирует документы после открытия дела (С номером дела):
     - информационное сообщение
     - заявление от СРО
     - заявление о согласии арбитражного управляющего
+    
+    Примечание: Кредиторы не требуются для этих документов
     """
     zip_buffer = io.BytesIO()
     
@@ -364,14 +387,10 @@ def generate_case_documents_archive(replacements, creditors, surname, name, curr
             print("⚠️ Шаблон информационного сообщения (inform-message.docx) не найден")
         
         # Генерируем заявление от СРО
-        # Сначала проверяем .docx формат, затем .doc
-        sro_template = None
-        if os.path.exists("zayavSRO.docx"):
-            sro_template = "zayavSRO.docx"
-        elif os.path.exists("zayavSRO.doc"):
-            sro_template = "zayavSRO.doc"
+        # Используем обновленную версию zayavSRO1.docx
+        sro_template = "zayavSRO1.docx"
         
-        if sro_template:
+        if os.path.exists(sro_template):
             try:
                 sro_doc = process_document_in_memory(sro_template, replacements)
                 sro_filename = f"sro_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
@@ -380,7 +399,7 @@ def generate_case_documents_archive(replacements, creditors, surname, name, curr
             except Exception as e:
                 print(f"❌ Ошибка при создании заявления от СРО: {e}")
         else:
-            print("⚠️ Шаблон заявления от СРО (zayavSRO.docx или zayavSRO.doc) не найден")
+            print("⚠️ Шаблон заявления от СРО (zayavSRO1.docx) не найден")
         
         # Генерируем заявление о согласии арбитражного управляющего
         agreement_template = "zayavAgreement.docx"
@@ -723,24 +742,11 @@ def case_documents():
         inn = request.form.get('inn', '').strip()
         snils = request.form.get('snils', '').strip()
         
-        # Получаем данные адреса
-        region = request.form.get('region', '').strip()
-        district = request.form.get('district', '').strip()
-        city = request.form.get('city', '').strip()
-        street = request.form.get('street', '').strip()
-        house_number = request.form.get('house_number', '').strip()
-        building_number = request.form.get('building_number', '').strip()
-        apartment_number = request.form.get('apartment_number', '').strip()
+        # Получаем адрес (для документов после открытия дела достаточно полного адреса)
         registered_address = request.form.get('registered_address', '').strip()
         
-        # Получаем данные о долге
-        debt_amount_digits = request.form.get('debt_amount_digits', '').strip()
-        debt_amount_words = request.form.get('debt_amount_words', '').strip()
-        
-        # Получаем данные о госпошлине (по умолчанию 300 рублей для банкротства физлиц)
-        state_duty = request.form.get('state_duty', '300').strip()
-        if not state_duty:
-            state_duty = '300'
+        # Получаем общую сумму требований
+        total_debt = request.form.get('total_debt', '').strip()
         
         # Получаем данные о деле и судье (ОБЯЗАТЕЛЬНЫ для этой формы)
         case_number = request.form.get('case_number', '').strip()
@@ -751,52 +757,14 @@ def case_documents():
                           patronymic_genitive, surname_dative, name_dative, patronymic_dative,
                           birth_date, birth_place, passport_series, passport_number,
                           passport_issued_by, passport_issue_date,
-                          inn, snils, region, street, house_number, registered_address,
-                          debt_amount_digits, debt_amount_words, case_number, judge_name]
+                          inn, snils, registered_address, total_debt,
+                          case_number, judge_name]
         if not all(required_fields):
             flash('Все поля обязательны для заполнения (включая номер дела и судью)', 'error')
             return redirect(url_for('case_documents'))
         
         if len(inn) != 12 or not inn.isdigit():
             flash('ИНН должен содержать ровно 12 цифр', 'error')
-            return redirect(url_for('case_documents'))
-        
-        # Получаем данные о кредиторах
-        creditors = []
-        creditor_num = 1
-        while True:
-            creditor_name = request.form.get(f'creditor_name_{creditor_num}', '').strip()
-            creditor_address = request.form.get(f'creditor_address_{creditor_num}', '').strip()
-            obligation_content = request.form.get(f'obligation_content_{creditor_num}', '').strip()
-            obligation_basis = request.form.get(f'obligation_basis_{creditor_num}', '').strip()
-            obligation_amount = request.form.get(f'obligation_amount_{creditor_num}', '').strip()
-            debt_amount = request.form.get(f'debt_amount_{creditor_num}', '').strip()
-            penalties = request.form.get(f'penalties_{creditor_num}', '').strip()
-            
-            if not creditor_name and not creditor_address:
-                break
-            
-            creditor_fields = [creditor_name, creditor_address, obligation_content, 
-                              obligation_basis, obligation_amount, debt_amount, penalties]
-            if not all(creditor_fields):
-                flash(f'Заполните все поля для кредитора {creditor_num}', 'error')
-                return redirect(url_for('case_documents'))
-            
-            creditors.append({
-                'name': creditor_name,
-                'address': creditor_address,
-                'Содержание обязательства': obligation_content,
-                'Кредитор': creditor_name,
-                'Место нахождения': creditor_address,
-                'Основание': obligation_basis,
-                'Сумма обязательства': obligation_amount,
-                'Задолженность': debt_amount,
-                'Штрафы': penalties
-            })
-            creditor_num += 1
-        
-        if not creditors:
-            flash('Необходимо указать хотя бы одного кредитора', 'error')
             return redirect(url_for('case_documents'))
         
         try:
@@ -839,130 +807,44 @@ def case_documents():
             # Формируем полную строку с паспортными данными
             passport_info = f"Паспорт РФ {passport_full}\nВыдан {passport_issued_by}\nдата выдачи: {formatted_passport_issue_date}"
             
-            # Вычисляем общую сумму задолженности
-            total_debt = calculate_total_debt(creditors)
-            formatted_total_debt = format_amount(str(total_debt))
+            # Форматируем сумму требований
+            formatted_total_debt = format_amount(total_debt)
             
-            # Подготавливаем замены
+            # Форматируем имя судьи
+            judge_formatted = format_judge_name(judge_name)
+            
+            # Подготавливаем замены (только реально используемые в документах after case)
             replacements = {
-                # Основные персональные данные (именительный падеж)
-                "{Фамилия}": surname,
-                "{Фамилия} ": surname + " ",
-                "{фамилия}": surname,
-                "{фамилия} ": surname + " ",
-                "{Имя}": name,
-                "{имя}": name,
-                "{Отчество}": patronymic,
-                "{отчество}": patronymic,
+                # Основные персональные данные
+                "{ИНН}": inn,
                 "{ФИО}": full_name,
                 "{ФИО должника}": full_name,
                 
-                # ФИО в родительном падеже (кого? чего?)
-                "{Фамилия родительный}": surname_genitive,
-                "{Имя родительный}": name_genitive,
-                "{Отчество родительный}": patronymic_genitive,
-                "{ФИО родительный}": full_name_genitive,
-                
-                # ФИО в дательном падеже (кому? чему?)
-                "{Фамилия дательный}": surname_dative,
-                "{Имя дательный}": name_dative,
-                "{Отчество дательный}": patronymic_dative,
-                "{ФИО дательный}": full_name_dative,
-                
-                # Дата и место рождения
-                "{дата рождения}": formatted_birth_date,
-                "{dd.mm.yyyy дата рождения}": formatted_birth_date,
-                "{место рождения}": birth_place,
-                "{дата и место рождения}": birth_info,
-                
-                # Паспортные данные
-                "{паспортные данные}": passport_info,
-                "{серия и номер паспорта}": passport_full,
-                "{паспорт серия}": passport_series,
-                "{паспорт номер}": passport_number,
-                "{паспорт кем выдан}": passport_issued_by,
-                "{паспорт дата выдачи}": formatted_passport_issue_date,
-                
-                # ИНН и СНИЛС
-                "{ИНН}": inn,
-                "{СНИЛС}": snils,
-                
-                # Детализированный адрес
-                "{субъект РФ}": region,
-                "{район (при наличии)}": district,
-                "{город (при наличии)}": city,
-                "{населенный пункт}": city,
-                "{улица}": street,
-                "{номер дома}": house_number,
-                "{номер корпуса}": building_number,
-                "{номер корпуса (может быть пустым)}": building_number,
-                "{номер квартиры}": apartment_number,
-                "{номер квартиры может быть пустым}": apartment_number,
-                "{Зарегистрирован по адресу}": registered_address,
-                
-                # Финансовая информация
-                "{сумма долга цифрами}": debt_amount_digits,
-                "{сумма долга буквами}": debt_amount_words,
-                "{общая сумма задолженности}": f"{formatted_total_debt} рублей",
-                "{сумма требований}": formatted_total_debt,
-                "{госпошлина}": state_duty,
-                
-                # Дата и подпись
-                "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
-                "{dd}.{mm}.{yyyy}г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year}г.",
-                "{dd}": f"{current_date.day:02d}",
-                "{mm}": f"{current_date.month:02d}",
-                "{month name}": month_name,
-                "{yyyy}": str(current_date.year),
-                "{дата}": current_date.strftime("%d.%m.%Y"),
-                "{число месяца}": str(current_date.day),
-                "{месяц}": month_name,
-                "{год}": str(current_date.year),
-                "{Первая буква имени}": first_letter_name,
-                "{первая буква отчества}": first_letter_patronymic,
-                "{Фамилия и первые буквы имени и отчества}": f"{surname} {first_letter_name}.{first_letter_patronymic}.",
-                
-                # Плейсхолдеры для информационного сообщения
+                # ИНН и СНИЛС для информационного сообщения
                 "{ИНН ДОЛЖНИКА}": inn,
                 "{СНИЛС ДОЛЖНИКА}": snils,
-                "{номер дела}": case_number,
+                
+                # Адрес (только полный адрес одной строкой)
                 "{месторасположение должника}": registered_address,
+                
+                # Финансовая информация
+                "{сумма требований}": formatted_total_debt,
                 "{сумма требований к должнику}": f"{formatted_total_debt} рублей",
                 
-                # Плейсхолдеры для заявления от СРО и Agreement
+                # Дата
+                "{dd}": f"{current_date.day:02d}",
+                "{mm}": f"{current_date.month:02d}",
+                "{yyyy}": str(current_date.year),
+                
+                # Информация о деле
+                "{номер дела}": case_number,
                 "{дело}": case_number,
                 "{судья}": judge_name,
-                
-                # Кредиторы
-                "{Наименование кредитора}": creditors[0]['name'] if creditors else "",
-                "{Почтовый индекс и адрес}": creditors[0]['address'] if creditors else "",
-                "{место нахождения кредитора}": creditors[0]['address'] if creditors else "",
-                "{основание возникновения}": creditors[0]['Основание'] if creditors else "",
-                "{сумма обязательства}": creditors[0]['Сумма обязательства'] if creditors else "",
-                "{сумма задолженности}": creditors[0]['Задолженность'] if creditors else "",
-                "{штрафы + пени}": creditors[0]['Штрафы'] if creditors else "",
+                "{Фамилия судьи + ее инициалы}": judge_formatted,
             }
             
-            if len(creditors) >= 1:
-                replacements.update({
-                    "{кредит1}": creditors[0]['Содержание обязательства'],
-                    "{кредитор1}": creditors[0]['Кредитор'],
-                })
-            
-            if len(creditors) >= 2:
-                replacements.update({
-                    "{кредит2}": creditors[1]['Содержание обязательства'],
-                    "{кредитор2}": creditors[1]['Кредитор'],
-                })
-            
-            for i, creditor in enumerate(creditors, 1):
-                replacements[f"{{Кредитор {i}}}"] = f"Кредитор {i}"
-                replacements[f"{{Кредитор n}}"] = f"Кредитор {i}" if i == 1 else replacements.get(f"{{Кредитор n}}", f"Кредитор {i}")
-                if i > 1:
-                    replacements[f"{{Кредитор n+{i-1}}}"] = f"Кредитор {i}"
-            
             # Создаем ZIP-архив с документами после открытия дела
-            zip_buffer = generate_case_documents_archive(replacements, creditors, surname, name, current_date)
+            zip_buffer = generate_case_documents_archive(replacements, surname, name, current_date)
             filename = f"case_documents_{surname}_{name}_{current_date.strftime('%Y%m%d')}.zip"
             
             return send_file(

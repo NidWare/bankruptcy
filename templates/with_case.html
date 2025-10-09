@@ -476,35 +476,10 @@
                 <!-- Адрес -->
                 <div class="form-section">
                     <h3 class="section-title">🏠 Адрес регистрации</h3>
+                    <div class="info-banner" style="margin-bottom: 1.5rem;">
+                        <p><strong>Примечание:</strong> Для документов после открытия дела достаточно указать полный адрес одной строкой.</p>
+                    </div>
                     <div class="form-grid">
-                        <div class="form-group">
-                            <label for="region">Субъект РФ</label>
-                            <input type="text" id="region" name="region" required placeholder="г. Москва">
-                        </div>
-                        <div class="form-group">
-                            <label for="district">Район (если есть)</label>
-                            <input type="text" id="district" name="district" placeholder="Необязательно">
-                        </div>
-                        <div class="form-group">
-                            <label for="city">Населенный пункт</label>
-                            <input type="text" id="city" name="city" placeholder="Может быть пустым">
-                        </div>
-                        <div class="form-group">
-                            <label for="street">Улица</label>
-                            <input type="text" id="street" name="street" required placeholder="ул. Тверская">
-                        </div>
-                        <div class="form-group">
-                            <label for="house_number">Номер дома</label>
-                            <input type="text" id="house_number" name="house_number" required placeholder="10">
-                        </div>
-                        <div class="form-group">
-                            <label for="building_number">Номер корпуса</label>
-                            <input type="text" id="building_number" name="building_number" placeholder="Если есть">
-                        </div>
-                        <div class="form-group">
-                            <label for="apartment_number">Номер квартиры</label>
-                            <input type="text" id="apartment_number" name="apartment_number" placeholder="15">
-                        </div>
                         <div class="form-group full-width">
                             <label for="registered_address">Полный адрес регистрации</label>
                             <textarea id="registered_address" name="registered_address" required 
@@ -516,70 +491,16 @@
                 <!-- Информация о долге -->
                 <div class="form-section">
                     <h3 class="section-title">💰 Информация о долге</h3>
+                    <div class="info-banner" style="margin-bottom: 1.5rem;">
+                        <p><strong>Примечание:</strong> Для информационного сообщения достаточно указать общую сумму требований.</p>
+                    </div>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label for="debt_amount_digits">Общая сумма долга (цифрами)</label>
-                            <input type="text" id="debt_amount_digits" name="debt_amount_digits" required 
+                            <label for="total_debt">Общая сумма требований (руб.)</label>
+                            <input type="text" id="total_debt" name="total_debt" required 
                                    placeholder="500 000.00">
                         </div>
-                        <div class="form-group">
-                            <label for="debt_amount_words">Общая сумма долга (прописью)</label>
-                            <input type="text" id="debt_amount_words" name="debt_amount_words" required 
-                                   placeholder="пятьсот тысяч рублей 00 копеек">
-                        </div>
                     </div>
-                </div>
-
-                <!-- Кредиторы -->
-                <div class="form-section">
-                    <h3 class="section-title">🏛️ Кредиторы</h3>
-                    <div id="creditors-container">
-                        <div class="creditor-card">
-                            <div class="creditor-header">
-                                <h4>Кредитор 1</h4>
-                            </div>
-                            <div class="form-grid">
-                                <div class="form-group full-width">
-                                    <label for="creditor_name_1">Наименование кредитора</label>
-                                    <input type="text" id="creditor_name_1" name="creditor_name_1" required 
-                                           placeholder="ПАО Сбербанк">
-                                </div>
-                                <div class="form-group full-width">
-                                    <label for="creditor_address_1">Адрес кредитора</label>
-                                    <textarea id="creditor_address_1" name="creditor_address_1" required 
-                                              placeholder="117997, г. Москва, ул. Вавилова, д. 19"></textarea>
-                                </div>
-                                <div class="form-group full-width">
-                                    <label for="obligation_content_1">Содержание обязательства</label>
-                                    <input type="text" id="obligation_content_1" name="obligation_content_1" required 
-                                           placeholder="Потребительский кредит">
-                                </div>
-                                <div class="form-group full-width">
-                                    <label for="obligation_basis_1">Основание возникновения</label>
-                                    <input type="text" id="obligation_basis_1" name="obligation_basis_1" required 
-                                           placeholder="Договор потребительского кредита № 12345 от 01.01.2020">
-                                </div>
-                                <div class="form-group">
-                                    <label for="obligation_amount_1">Сумма обязательства (руб.)</label>
-                                    <input type="text" id="obligation_amount_1" name="obligation_amount_1" required 
-                                           placeholder="300 000.00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="debt_amount_1">Сумма задолженности (руб.)</label>
-                                    <input type="text" id="debt_amount_1" name="debt_amount_1" required 
-                                           placeholder="250 000.00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="penalties_1">Штрафы и пени (руб.)</label>
-                                    <input type="text" id="penalties_1" name="penalties_1" required 
-                                           placeholder="10 000.00">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-secondary" onclick="addCreditor()">
-                        + Добавить кредитора
-                    </button>
                 </div>
 
                 <div class="submit-section">
@@ -592,8 +513,6 @@
     </div>
 
     <script>
-        let creditorCount = 1;
-
         // Форматирование ИНН
         document.getElementById('inn').addEventListener('input', function(e) {
             e.target.value = e.target.value.replace(/\D/g, '').slice(0, 12);
@@ -607,63 +526,6 @@
             if (value.length > 11) value = value.slice(0, 11) + ' ' + value.slice(11);
             e.target.value = value;
         });
-
-        function addCreditor() {
-            creditorCount++;
-            const container = document.getElementById('creditors-container');
-            const newCreditor = document.createElement('div');
-            newCreditor.className = 'creditor-card';
-            newCreditor.innerHTML = `
-                <div class="creditor-header">
-                    <h4>Кредитор ${creditorCount}</h4>
-                    <button type="button" class="btn btn-danger" onclick="removeCreditor(this)">Удалить</button>
-                </div>
-                <div class="form-grid">
-                    <div class="form-group full-width">
-                        <label for="creditor_name_${creditorCount}">Наименование кредитора</label>
-                        <input type="text" id="creditor_name_${creditorCount}" name="creditor_name_${creditorCount}" required 
-                               placeholder="ПАО Сбербанк">
-                    </div>
-                    <div class="form-group full-width">
-                        <label for="creditor_address_${creditorCount}">Адрес кредитора</label>
-                        <textarea id="creditor_address_${creditorCount}" name="creditor_address_${creditorCount}" required 
-                                  placeholder="117997, г. Москва, ул. Вавилова, д. 19"></textarea>
-                    </div>
-                    <div class="form-group full-width">
-                        <label for="obligation_content_${creditorCount}">Содержание обязательства</label>
-                        <input type="text" id="obligation_content_${creditorCount}" name="obligation_content_${creditorCount}" required 
-                               placeholder="Потребительский кредит">
-                    </div>
-                    <div class="form-group full-width">
-                        <label for="obligation_basis_${creditorCount}">Основание возникновения</label>
-                        <input type="text" id="obligation_basis_${creditorCount}" name="obligation_basis_${creditorCount}" required 
-                               placeholder="Договор потребительского кредита № 12345 от 01.01.2020">
-                    </div>
-                    <div class="form-group">
-                        <label for="obligation_amount_${creditorCount}">Сумма обязательства (руб.)</label>
-                        <input type="text" id="obligation_amount_${creditorCount}" name="obligation_amount_${creditorCount}" required 
-                               placeholder="300 000.00">
-                    </div>
-                    <div class="form-group">
-                        <label for="debt_amount_${creditorCount}">Сумма задолженности (руб.)</label>
-                        <input type="text" id="debt_amount_${creditorCount}" name="debt_amount_${creditorCount}" required 
-                               placeholder="250 000.00">
-                    </div>
-                    <div class="form-group">
-                        <label for="penalties_${creditorCount}">Штрафы и пени (руб.)</label>
-                        <input type="text" id="penalties_${creditorCount}" name="penalties_${creditorCount}" required 
-                               placeholder="10 000.00">
-                    </div>
-                </div>
-            `;
-            container.appendChild(newCreditor);
-        }
-
-        function removeCreditor(button) {
-            if (document.querySelectorAll('.creditor-card').length > 1) {
-                button.closest('.creditor-card').remove();
-            }
-        }
 
         document.querySelector('form').addEventListener('submit', function() {
             const submitBtn = document.querySelector('.btn-submit');
