@@ -603,6 +603,7 @@ def initial_documents():
                 "{сумма долга буквами}": debt_amount_words,
                 "{общая сумма задолженности}": f"{formatted_total_debt} рублей",
                 "{сумма требований}": formatted_total_debt,
+                "{госпошлина}": state_duty,
                 
                 # Дата и подпись
                 "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
@@ -723,6 +724,11 @@ def case_documents():
         # Получаем данные о долге
         debt_amount_digits = request.form.get('debt_amount_digits', '').strip()
         debt_amount_words = request.form.get('debt_amount_words', '').strip()
+        
+        # Получаем данные о госпошлине (по умолчанию 300 рублей для банкротства физлиц)
+        state_duty = request.form.get('state_duty', '300').strip()
+        if not state_duty:
+            state_duty = '300'
         
         # Получаем данные о деле и судье (ОБЯЗАТЕЛЬНЫ для этой формы)
         case_number = request.form.get('case_number', '').strip()
@@ -887,6 +893,7 @@ def case_documents():
                 "{сумма долга буквами}": debt_amount_words,
                 "{общая сумма задолженности}": f"{formatted_total_debt} рублей",
                 "{сумма требований}": formatted_total_debt,
+                "{госпошлина}": state_duty,
                 
                 # Дата и подпись
                 "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
