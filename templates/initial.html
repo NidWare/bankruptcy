@@ -142,7 +142,8 @@
 
         input[type="text"],
         input[type="date"],
-        textarea {
+        textarea,
+        select {
             padding: 0.75rem 1rem;
             border: 1px solid #d1d5db;
             border-radius: 8px;
@@ -153,7 +154,8 @@
         }
 
         input:focus,
-        textarea:focus {
+        textarea:focus,
+        select:focus {
             outline: none;
             border-color: #3b82f6;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
@@ -468,6 +470,29 @@
                             <label for="registered_address">Полный адрес регистрации</label>
                             <textarea id="registered_address" name="registered_address" required 
                                       placeholder="105005, г. Москва, ул. Тверская, д. 10, кв. 15"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Семейное положение -->
+                <div class="form-section">
+                    <h3 class="section-title">👨‍👩‍👧‍👦 Семейное положение</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="has_marriage">Состоите ли в браке?</label>
+                            <select id="has_marriage" name="has_marriage" required>
+                                <option value="">Выберите...</option>
+                                <option value="yes">Да</option>
+                                <option value="no">Нет</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="has_children">Есть ли дети?</label>
+                            <select id="has_children" name="has_children" required>
+                                <option value="">Выберите...</option>
+                                <option value="yes">Да</option>
+                                <option value="no">Нет</option>
+                            </select>
                         </div>
                     </div>
                 </div>

@@ -111,8 +111,14 @@ def add_creditors_rows_improved(doc, creditors):
             header_row = table.rows[0]
             header_text = " ".join(cell.text.strip().lower() for cell in header_row.cells)
             
-            # Если это таблица кредиторов (первая найденная)
-            if "кредитор" in header_text and ("обязательство" in header_text or "денежным обязательствам" in header_text):
+            # Если это таблица кредиторов (ищем по нескольким критериям)
+            is_creditors_table = (
+                ("кредитор" in header_text and ("обязательство" in header_text or "денежным обязательствам" in header_text)) or
+                ("кредитор" in header_text and "задолженность" in header_text) or
+                ("кредитор" in header_text and "основание" in header_text)
+            )
+            
+            if is_creditors_table:
                 print(f"Найдена таблица кредиторов с {len(table.rows)} строками")
                 
                 # Находим существующие строки с данными кредиторов (строки 1.1, 1.2 и т.д.)
@@ -142,17 +148,26 @@ def add_creditors_rows_improved(doc, creditors):
                         creditor = creditors[creditor_num - 1]  # creditor_num начинается с 1
                         cells = table.rows[row_idx].cells
                         
+                        # Поддерживаем таблицы с разным количеством колонок
                         if len(cells) >= 8:
+                            # Полная таблица (как в list-of-creditors.docx)
                             cells[0].text = f"1.{creditor_num}"
                             cells[1].text = creditor.get("Содержание обязательства", "")
                             cells[2].text = creditor.get("Кредитор", "")
                             cells[3].text = creditor.get("Место нахождения", "")
                             cells[4].text = creditor.get("Основание", "")
-                            # Форматируем числовые значения с пробелами
                             cells[5].text = format_amount(creditor.get("Сумма обязательства", ""))
                             cells[6].text = format_amount(creditor.get("Задолженность", ""))
                             cells[7].text = format_amount(creditor.get("Штрафы", ""))
-                            print(f"Заменен кредитор {creditor_num}: {creditor.get('Кредитор', 'Неизвестно')}")
+                        elif len(cells) >= 4:
+                            # Упрощенная таблица (возможно в zayav.docx)
+                            cells[0].text = f"1.{creditor_num}"
+                            cells[1].text = creditor.get("Содержание обязательства", "")
+                            cells[2].text = creditor.get("Кредитор", "")
+                            cells[3].text = creditor.get("Основание", "")
+                        else:
+                            print(f"⚠️ Таблица имеет недостаточно колонок: {len(cells)}")
+                        print(f"Заменен кредитор {creditor_num}: {creditor.get('Кредитор', 'Неизвестно')}")
                     else:
                         # Кредитора нет - нужно удалить эту строку
                         rows_to_delete.append(row_idx)
@@ -198,19 +213,26 @@ def add_creditors_rows_improved(doc, creditors):
                         new_row = table.add_row()
                         cells = new_row.cells
                         
+                        # Поддерживаем таблицы с разным количеством колонок
                         if len(cells) >= 8:
+                            # Полная таблица (как в list-of-creditors.docx)
                             cells[0].text = f"1.{i + 1}"
                             cells[1].text = creditor.get("Содержание обязательства", "")
                             cells[2].text = creditor.get("Кредитор", "")
                             cells[3].text = creditor.get("Место нахождения", "")
                             cells[4].text = creditor.get("Основание", "")
-                            # Форматируем числовые значения с пробелами
                             cells[5].text = format_amount(creditor.get("Сумма обязательства", ""))
                             cells[6].text = format_amount(creditor.get("Задолженность", ""))
                             cells[7].text = format_amount(creditor.get("Штрафы", ""))
-                            print(f"Добавлен кредитор {i + 1}: {creditor.get('Кредитор', 'Неизвестно')}")
+                        elif len(cells) >= 4:
+                            # Упрощенная таблица (возможно в zayav.docx)
+                            cells[0].text = f"1.{i + 1}"
+                            cells[1].text = creditor.get("Содержание обязательства", "")
+                            cells[2].text = creditor.get("Кредитор", "")
+                            cells[3].text = creditor.get("Основание", "")
                         else:
-                            print(f"Недостаточно ячеек для кредитора {i + 1}: {len(cells)} < 8")
+                            print(f"⚠️ Таблица имеет недостаточно ячеек для кредитора {i + 1}: {len(cells)}")
+                        print(f"Добавлен кредитор {i + 1}: {creditor.get('Кредитор', 'Неизвестно')}")
                     
                     # Восстанавливаем строки раздела 2 с сохранением оригинальной структуры
                     if section_2_rows:
@@ -245,8 +267,8 @@ def process_document_in_memory(template_path, replacements, creditors=None):
     # Используем улучшенную функцию замены плейсхолдеров
     replace_placeholders_advanced(doc, replacements)
     
-    # Если есть данные кредиторов и это документ со списком кредиторов, добавляем их
-    if creditors and template_path.endswith('list-of-creditors.docx'):
+    # Если есть данные кредиторов, добавляем их в таблицы (для заявления о банкротстве и списка кредиторов)
+    if creditors and (template_path.endswith('list-of-creditors.docx') or template_path.endswith('zayav.docx')):
         add_creditors_rows_improved(doc, creditors)
     
     # Сохраняем документ в память
@@ -689,27 +711,78 @@ def initial_documents():
                 replacements.update({
                     "{кредит1}": creditors[0]['Содержание обязательства'],
                     "{кредитор1}": creditors[0]['Кредитор'],
+                    "{Наименование кредитора 1}": creditors[0]['name'],
+                    "{адрес кредитора 1}": creditors[0]['address'],
+                    "{Почтовый индекс и адрес 1}": creditors[0]['address'],
+                    "{место нахождения кредитора 1}": creditors[0]['address'],
+                    "{основание возникновения 1}": creditors[0]['Основание'],
+                    "{сумма обязательства 1}": creditors[0]['Сумма обязательства'],
+                    "{сумма задолженности 1}": creditors[0]['Задолженность'],
+                    "{штрафы + пени 1}": creditors[0]['Штрафы'],
                 })
+                print(f"✅ Добавлены плейсхолдеры для кредитора 1: {creditors[0].get('name', 'Неизвестно')}")
             else:
                 replacements.update({
                     "{кредит1}": "",
                     "{кредитор1}": "",
+                    "{Наименование кредитора 1}": "",
+                    "{адрес кредитора 1}": "",
+                    "{Почтовый индекс и адрес 1}": "",
+                    "{место нахождения кредитора 1}": "",
+                    "{основание возникновения 1}": "",
+                    "{сумма обязательства 1}": "",
+                    "{сумма задолженности 1}": "",
+                    "{штрафы + пени 1}": "",
                 })
             
             if len(creditors) >= 2:
                 replacements.update({
                     "{кредит2}": creditors[1]['Содержание обязательства'],
                     "{кредитор2}": creditors[1]['Кредитор'],
+                    "{Наименование кредитора 2}": creditors[1]['name'],
+                    "{адрес кредитора 2}": creditors[1]['address'],
+                    "{Почтовый индекс и адрес 2}": creditors[1]['address'],
+                    "{место нахождения кредитора 2}": creditors[1]['address'],
+                    "{основание возникновения 2}": creditors[1]['Основание'],
+                    "{сумма обязательства 2}": creditors[1]['Сумма обязательства'],
+                    "{сумма задолженности 2}": creditors[1]['Задолженность'],
+                    "{штрафы + пени 2}": creditors[1]['Штрафы'],
                 })
+                print(f"✅ Добавлены плейсхолдеры для кредитора 2: {creditors[1].get('name', 'Неизвестно')}")
             else:
                 replacements.update({
                     "{кредит2}": "",
                     "{кредитор2}": "",
+                    "{Наименование кредитора 2}": "",
+                    "{адрес кредитора 2}": "",
+                    "{Почтовый индекс и адрес 2}": "",
+                    "{место нахождения кредитора 2}": "",
+                    "{основание возникновения 2}": "",
+                    "{сумма обязательства 2}": "",
+                    "{сумма задолженности 2}": "",
+                    "{штрафы + пени 2}": "",
                 })
             
-            # Добавляем замены для всех кредиторов с номерами
+            # Добавляем замены для всех кредиторов (начиная с 3-го, т.к. 1-2 уже добавлены)
+            for i in range(3, len(creditors) + 1):
+                creditor = creditors[i - 1]  # индекс с 0
+                replacements.update({
+                    f"{{кредит{i}}}": creditor['Содержание обязательства'],
+                    f"{{кредитор{i}}}": creditor['Кредитор'],
+                    f"{{Наименование кредитора {i}}}": creditor['name'],
+                    f"{{адрес кредитора {i}}}": creditor['address'],
+                    f"{{Почтовый индекс и адрес {i}}}": creditor['address'],
+                    f"{{место нахождения кредитора {i}}}": creditor['address'],
+                    f"{{основание возникновения {i}}}": creditor['Основание'],
+                    f"{{сумма обязательства {i}}}": creditor['Сумма обязательства'],
+                    f"{{сумма задолженности {i}}}": creditor['Задолженность'],
+                    f"{{штрафы + пени {i}}}": creditor['Штрафы'],
+                })
+                print(f"✅ Добавлены плейсхолдеры для кредитора {i}: {creditor.get('name', 'Неизвестно')}")
+            
+            # Общие плейсхолдеры для кредиторов
             for i, creditor in enumerate(creditors, 1):
-                replacements[f"{{Кредитор {i}}}"] = f"Кредитор {i}"
+                replacements[f"{{Кредитор {i}}}"] = creditor.get('Кредитор', f"Кредитор {i}")
                 replacements[f"{{Кредитор n}}"] = f"Кредитор {i}" if i == 1 else replacements.get(f"{{Кредитор n}}", f"Кредитор {i}")
                 if i > 1:
                     replacements[f"{{Кредитор n+{i-1}}}"] = f"Кредитор {i}"
