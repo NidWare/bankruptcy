@@ -466,6 +466,10 @@ def initial_documents():
         if not state_duty:
             state_duty = '300'
         
+        # Получаем данные о браке и детях
+        has_marriage = request.form.get('has_marriage', '').strip()  # 'yes' или 'no'
+        has_children = request.form.get('has_children', '').strip()  # 'yes' или 'no'
+        
         # Получаем данные о деле и судье (для документа СРО)
         case_number = request.form.get('case_number', '').strip()
         judge_name = request.form.get('judge_name', '').strip()
@@ -572,6 +576,10 @@ def initial_documents():
             total_debt = calculate_total_debt(creditors)
             formatted_total_debt = format_amount(str(total_debt))
             
+            # Преобразуем данные о браке и детях в текстовый формат
+            marriage_text = "да" if has_marriage == 'yes' else "нет"
+            children_text = "да" if has_children == 'yes' else "нет"
+            
             # Подготавливаем основные замены (включая новые поля из list-of-creditors-final.py)
             replacements = {
                 # Основные персональные данные (именительный падеж)
@@ -616,6 +624,10 @@ def initial_documents():
                 "{ИНН}": inn,
                 "{СНИЛС}": snils,
                 
+                # Брак и дети
+                "{брак}": marriage_text,
+                "{дети}": children_text,
+                
                 # Детализированный адрес
                 "{субъект РФ}": region,
                 "{район (при наличии)}": district,
@@ -634,7 +646,7 @@ def initial_documents():
                 "{сумма долга буквами}": debt_amount_words,
                 "{общая сумма задолженности}": f"{formatted_total_debt} рублей",
                 "{сумма требований}": formatted_total_debt,
-                "{госпошлина}": state_duty,
+                "{госпошлина}": f"{state_duty} рублей",
                 
                 # Дата и подпись
                 "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
@@ -678,11 +690,21 @@ def initial_documents():
                     "{кредит1}": creditors[0]['Содержание обязательства'],
                     "{кредитор1}": creditors[0]['Кредитор'],
                 })
+            else:
+                replacements.update({
+                    "{кредит1}": "",
+                    "{кредитор1}": "",
+                })
             
             if len(creditors) >= 2:
                 replacements.update({
                     "{кредит2}": creditors[1]['Содержание обязательства'],
                     "{кредитор2}": creditors[1]['Кредитор'],
+                })
+            else:
+                replacements.update({
+                    "{кредит2}": "",
+                    "{кредитор2}": "",
                 })
             
             # Добавляем замены для всех кредиторов с номерами
