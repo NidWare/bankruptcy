@@ -75,6 +75,66 @@ def replace_in_runs_preserve_formatting(paragraph, replacements):
             new_run.font.color.rgb = base_formatting['color']
 
 
+def add_additional_creditors_to_text(doc, creditors):
+    """
+    Добавляет информацию о дополнительных кредиторах в таблицу заявления (шапка документа)
+    ВЫЗЫВАЕТСЯ ПОСЛЕ замены плейсхолдеров, поэтому ищем по названию первого кредитора
+    """
+    if len(creditors) <= 1:
+        return  # Нет дополнительных кредиторов
+    
+    # Ищем ячейку с информацией о первом кредиторе в таблице (шапка документа)
+    # После замены плейсхолдеров там может быть "Кредитор 1" или название первого кредитора
+    creditor_cell = None
+    first_creditor_name = creditors[0]['name']
+    
+    for table_idx, table in enumerate(doc.tables):
+        for row_idx, row in enumerate(table.rows):
+            for cell_idx, cell in enumerate(row.cells):
+                cell_text = cell.text.strip()
+                # Ищем ячейку с "Кредитор 1" или с названием первого кредитора
+                if ("Кредитор 1" in cell_text or first_creditor_name in cell_text) and len(cell_text) < 300:
+                    creditor_cell = cell
+                    print(f"Найдена ячейка с кредитором в таблице {table_idx}, строка {row_idx}, ячейка {cell_idx}")
+                    break
+            if creditor_cell is not None:
+                break
+        if creditor_cell is not None:
+            break
+    
+    if creditor_cell is None:
+        print(f"⚠️ Не найдена ячейка с информацией о кредиторе (искали '{first_creditor_name[:30]}...')")
+        return
+    
+    # Добавляем параграфы для дополнительных кредиторов в ячейку
+    for creditor_idx in range(1, len(creditors)):  # Начинаем со второго
+        creditor = creditors[creditor_idx]
+        creditor_num = creditor_idx + 1
+        
+        try:
+            # 0. Пустая строка для отступа (перед каждым кредитором)
+            creditor_cell.add_paragraph()
+            
+            # 1. Заголовок "Кредитор N" - жирным
+            p_header = creditor_cell.add_paragraph()
+            run_header = p_header.add_run(f"Кредитор {creditor_num}")
+            run_header.bold = True
+            
+            # 2. Название кредитора - жирным
+            p_name = creditor_cell.add_paragraph()
+            run_name = p_name.add_run(creditor['name'])
+            run_name.bold = True
+            
+            # 3. Адрес кредитора - жирным
+            p_address = creditor_cell.add_paragraph()
+            run_address = p_address.add_run(creditor['address'])
+            run_address.bold = True
+            
+            print(f"✅ Добавлен текст о кредиторе {creditor_num}: {creditor['name']}")
+        except Exception as e:
+            print(f"❌ Ошибка при добавлении кредитора {creditor_num}: {e}")
+
+
 def replace_placeholders_advanced(doc, replacements):
     """
     Улучшенная замена плейсхолдеров с обработкой всех элементов документа
@@ -271,6 +331,10 @@ def process_document_in_memory(template_path, replacements, creditors=None):
     if creditors and (template_path.endswith('list-of-creditors.docx') or template_path.endswith('zayav.docx')):
         add_creditors_rows_improved(doc, creditors)
     
+    # Для заявления о банкротстве добавляем дополнительных кредиторов в текстовую часть
+    if creditors and template_path.endswith('zayav.docx'):
+        add_additional_creditors_to_text(doc, creditors)
+    
     # Сохраняем документ в память
     doc_io = io.BytesIO()
     doc.save(doc_io)
@@ -344,7 +408,7 @@ def generate_initial_documents_archive(replacements, creditors, surname, name, c
         bankruptcy_template = "zayav.docx"
         if os.path.exists(bankruptcy_template):
             try:
-                bankruptcy_doc = process_document_in_memory(bankruptcy_template, replacements)
+                bankruptcy_doc = process_document_in_memory(bankruptcy_template, replacements, creditors)
                 bankruptcy_filename = f"bankruptcy_application_{surname}_{name}_{current_date.strftime('%Y%m%d')}.docx"
                 zip_file.writestr(bankruptcy_filename, bankruptcy_doc.getvalue())
                 print(f"✅ Создано заявление о банкротстве: {bankruptcy_filename}")
@@ -559,12 +623,13 @@ def initial_documents():
             first_letter_name = name[0].upper() if name else ''
             first_letter_patronymic = patronymic[0].upper() if patronymic else ''
             
-            # Получаем название месяца на русском языке
-            months_ru = [
+            # Получаем название месяца на русском языке в родительном падеже
+            months_ru_genitive = [
                 '', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
                 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
             ]
-            month_name = months_ru[current_date.month]
+            month_name = months_ru_genitive[current_date.month]
+            month_name_genitive = months_ru_genitive[current_date.month]
             
             # Форматируем дату рождения
             try:
@@ -598,9 +663,9 @@ def initial_documents():
             total_debt = calculate_total_debt(creditors)
             formatted_total_debt = format_amount(str(total_debt))
             
-            # Преобразуем данные о браке и детях в текстовый формат
-            marriage_text = "да" if has_marriage == 'yes' else "нет"
-            children_text = "да" if has_children == 'yes' else "нет"
+            # Преобразуем данные о браке и детях: полный текст от первого лица
+            marriage_text = "Состою в браке" if has_marriage == 'yes' else "Не состою в браке"
+            children_text = "Имею несовершеннолетних детей" if has_children == 'yes' else "Не имею несовершеннолетних детей"
             
             # Подготавливаем основные замены (включая новые поля из list-of-creditors-final.py)
             replacements = {
@@ -615,18 +680,26 @@ def initial_documents():
                 "{отчество}": patronymic,
                 "{ФИО}": full_name,
                 "{ФИО должника}": full_name,
+                "я я я": full_name_dative,  # Плейсхолдер ФИО в дательном падеже из шаблона
                 
                 # ФИО в родительном падеже (кого? чего?)
                 "{Фамилия родительный}": surname_genitive,
                 "{Имя родительный}": name_genitive,
                 "{Отчество родительный}": patronymic_genitive,
                 "{ФИО родительный}": full_name_genitive,
+                "{Фамилия в родительном падеже}": surname_genitive,
+                "{Имя в родительном падеже}": name_genitive,
+                "{Отчество в родительном падеже}": patronymic_genitive,
+                "{Отчество в родительном падеже }": patronymic_genitive,  # С пробелом в конце
                 
                 # ФИО в дательном падеже (кому? чему?)
                 "{Фамилия дательный}": surname_dative,
                 "{Имя дательный}": name_dative,
                 "{Отчество дательный}": patronymic_dative,
                 "{ФИО дательный}": full_name_dative,
+                "{Фамилия в дательном падеже}": surname_dative,
+                "{Имя в дательном падеже}": name_dative,
+                "{Отчество в дательном падеже}": patronymic_dative,
                 
                 # Дата и место рождения
                 "{дата рождения}": formatted_birth_date,
@@ -641,14 +714,17 @@ def initial_documents():
                 "{паспорт номер}": passport_number,
                 "{паспорт кем выдан}": passport_issued_by,
                 "{паспорт дата выдачи}": formatted_passport_issue_date,
+                "фываываыфа": passport_issued_by,  # Плейсхолдер для "кем выдан" из шаблона
                 
                 # ИНН и СНИЛС
                 "{ИНН}": inn,
                 "{СНИЛС}": snils,
                 
-                # Брак и дети
-                "{брак}": marriage_text,
+                # Брак и дети (все варианты плейсхолдеров) - полный текст
                 "{дети}": children_text,
+                "{брак}": marriage_text,
+                "- нет": f"- {children_text}",
+                "- да": f"- {marriage_text}",
                 
                 # Детализированный адрес
                 "{субъект РФ}": region,
@@ -662,13 +738,16 @@ def initial_documents():
                 "{номер квартиры}": apartment_number,
                 "{номер квартиры может быть пустым}": apartment_number,
                 "{Зарегистрирован по адресу}": registered_address,
+                "фываыфва": registered_address,  # Плейсхолдер для адреса из шаблона
                 
                 # Финансовая информация
                 "{сумма долга цифрами}": debt_amount_digits,
                 "{сумма долга буквами}": debt_amount_words,
                 "{общая сумма задолженности}": f"{formatted_total_debt} рублей",
                 "{сумма требований}": formatted_total_debt,
-                "{госпошлина}": f"{state_duty} рублей",
+                "{госпошлина}": state_duty,  # В шаблоне уже есть слово "рублей"
+                "123213": debt_amount_digits,  # Плейсхолдер для суммы цифрами из шаблона
+                "аываыа": debt_amount_words,  # Плейсхолдер для суммы прописью из шаблона
                 
                 # Дата и подпись
                 "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
@@ -680,10 +759,13 @@ def initial_documents():
                 "{дата}": current_date.strftime("%d.%m.%Y"),
                 "{число месяца}": str(current_date.day),
                 "{месяц}": month_name,
+                "{месяц в родительном падеже}": month_name_genitive,
+                "{месяц В РОДИТЕЛЬНОМ ПАДЕЖЕ, ты сам должен определить}": month_name_genitive,
                 "{год}": str(current_date.year),
                 "{Первая буква имени}": first_letter_name,
                 "{первая буква отчества}": first_letter_patronymic,
                 "{Фамилия и первые буквы имени и отчества}": f"{surname} {first_letter_name}.{first_letter_patronymic}.",
+                "я Я.Я.": f"{surname} {first_letter_name}.{first_letter_patronymic}.",  # Плейсхолдер для подписи из шаблона
                 
                 # Плейсхолдеры для информационного сообщения
                 "{ИНН ДОЛЖНИКА}": inn,
@@ -783,9 +865,17 @@ def initial_documents():
             # Общие плейсхолдеры для кредиторов
             for i, creditor in enumerate(creditors, 1):
                 replacements[f"{{Кредитор {i}}}"] = creditor.get('Кредитор', f"Кредитор {i}")
+                # НЕ заменяем "Кредитор 1" без скобок, т.к. это нужно для функции add_additional_creditors_to_text
+                # replacements[f"Кредитор {i}"] = creditor.get('name', f"Кредитор {i}")  # УБРАНО
                 replacements[f"{{Кредитор n}}"] = f"Кредитор {i}" if i == 1 else replacements.get(f"{{Кредитор n}}", f"Кредитор {i}")
                 if i > 1:
                     replacements[f"{{Кредитор n+{i-1}}}"] = f"Кредитор {i}"
+            
+            # Добавляем плейсхолдеры "ЯЯ" для кредиторов
+            if len(creditors) >= 1:
+                replacements["ЯЯ"] = creditors[0]['name']  # Название первого кредитора
+            if len(creditors) >= 2:
+                replacements["ББ"] = creditors[1]['name']  # На случай, если второй кредитор тоже "ЯЯ" или другой
             
             # Проверяем наличие хотя бы одного шаблона
             bankruptcy_template = "zayav.docx"
@@ -822,22 +912,10 @@ def case_documents():
         surname = request.form.get('surname', '').strip()
         name = request.form.get('name', '').strip()
         patronymic = request.form.get('patronymic', '').strip()
-        surname_genitive = request.form.get('surname_genitive', '').strip()
-        name_genitive = request.form.get('name_genitive', '').strip()
-        patronymic_genitive = request.form.get('patronymic_genitive', '').strip()
-        surname_dative = request.form.get('surname_dative', '').strip()
-        name_dative = request.form.get('name_dative', '').strip()
-        patronymic_dative = request.form.get('patronymic_dative', '').strip()
-        birth_date = request.form.get('birth_date', '').strip()
-        birth_place = request.form.get('birth_place', '').strip()
-        passport_series = request.form.get('passport_series', '').strip()
-        passport_number = request.form.get('passport_number', '').strip()
-        passport_issued_by = request.form.get('passport_issued_by', '').strip()
-        passport_issue_date = request.form.get('passport_issue_date', '').strip()
         inn = request.form.get('inn', '').strip()
         snils = request.form.get('snils', '').strip()
         
-        # Получаем адрес (для документов после открытия дела достаточно полного адреса)
+        # Получаем адрес
         registered_address = request.form.get('registered_address', '').strip()
         
         # Получаем общую сумму требований
@@ -847,15 +925,11 @@ def case_documents():
         case_number = request.form.get('case_number', '').strip()
         judge_name = request.form.get('judge_name', '').strip()
         
-        # Валидация основных полей + обязательные номер дела и судья
-        required_fields = [surname, name, patronymic, surname_genitive, name_genitive,
-                          patronymic_genitive, surname_dative, name_dative, patronymic_dative,
-                          birth_date, birth_place, passport_series, passport_number,
-                          passport_issued_by, passport_issue_date,
-                          inn, snils, registered_address, total_debt,
-                          case_number, judge_name]
+        # Валидация основных полей
+        required_fields = [surname, name, patronymic, inn, snils, 
+                          registered_address, total_debt, case_number, judge_name]
         if not all(required_fields):
-            flash('Все поля обязательны для заполнения (включая номер дела и судью)', 'error')
+            flash('Все поля обязательны для заполнения', 'error')
             return redirect(url_for('case_documents'))
         
         if len(inn) != 12 or not inn.isdigit():
@@ -865,42 +939,8 @@ def case_documents():
         try:
             current_date = datetime.now()
             
-            first_letter_name = name[0].upper() if name else ''
-            first_letter_patronymic = patronymic[0].upper() if patronymic else ''
-            
-            months_ru = [
-                '', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-                'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
-            ]
-            month_name = months_ru[current_date.month]
-            
-            # Форматируем дату рождения
-            try:
-                birth_date_obj = datetime.strptime(birth_date, '%Y-%m-%d')
-                formatted_birth_date = birth_date_obj.strftime('%d.%m.%Y')
-            except ValueError:
-                formatted_birth_date = birth_date
-            
-            # Форматируем дату выдачи паспорта
-            try:
-                passport_issue_date_obj = datetime.strptime(passport_issue_date, '%Y-%m-%d')
-                formatted_passport_issue_date = passport_issue_date_obj.strftime('%d.%m.%Y')
-            except ValueError:
-                formatted_passport_issue_date = passport_issue_date
-            
-            # Формируем полное ФИО должника в разных падежах
+            # Формируем полное ФИО должника
             full_name = f"{surname} {name} {patronymic}"
-            full_name_genitive = f"{surname_genitive} {name_genitive} {patronymic_genitive}"
-            full_name_dative = f"{surname_dative} {name_dative} {patronymic_dative}"
-            
-            # Формируем паспортные данные
-            passport_full = f"{passport_series} {passport_number}"
-            
-            # Формируем полную строку с датой рождения и местом рождения
-            birth_info = f"{formatted_birth_date} г.р., место рождения: {birth_place}"
-            
-            # Формируем полную строку с паспортными данными
-            passport_info = f"Паспорт РФ {passport_full}\nВыдан {passport_issued_by}\nдата выдачи: {formatted_passport_issue_date}"
             
             # Форматируем сумму требований
             formatted_total_debt = format_amount(total_debt)
@@ -914,22 +954,15 @@ def case_documents():
                 "{ИНН}": inn,
                 "{ФИО}": full_name,
                 "{ФИО должника}": full_name,
-                
-                # ИНН и СНИЛС для информационного сообщения
                 "{ИНН ДОЛЖНИКА}": inn,
                 "{СНИЛС ДОЛЖНИКА}": snils,
                 
-                # Адрес (только полный адрес одной строкой)
+                # Адрес
                 "{месторасположение должника}": registered_address,
                 
                 # Финансовая информация
                 "{сумма требований}": formatted_total_debt,
                 "{сумма требований к должнику}": f"{formatted_total_debt} рублей",
-                
-                # Дата
-                "{dd}": f"{current_date.day:02d}",
-                "{mm}": f"{current_date.month:02d}",
-                "{yyyy}": str(current_date.year),
                 
                 # Информация о деле
                 "{номер дела}": case_number,
