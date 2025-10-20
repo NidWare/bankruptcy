@@ -948,6 +948,14 @@ def case_documents():
             # Форматируем имя судьи
             judge_formatted = format_judge_name(judge_name)
             
+            # Получаем название месяца на русском языке в родительном падеже
+            months_ru_genitive = [
+                '', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
+            ]
+            month_name = months_ru_genitive[current_date.month]
+            month_name_genitive = months_ru_genitive[current_date.month]
+            
             # Подготавливаем замены (только реально используемые в документах after case)
             replacements = {
                 # Основные персональные данные
@@ -969,6 +977,20 @@ def case_documents():
                 "{дело}": case_number,
                 "{судья}": judge_name,
                 "{Фамилия судьи + ее инициалы}": judge_formatted,
+                
+                # Дата
+                "{dd}.{mm}.{yyyy} г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year} г.",
+                "{dd}.{mm}.{yyyy}г.": f"{current_date.day:02d}.{current_date.month:02d}.{current_date.year}г.",
+                "{dd}": f"{current_date.day:02d}",
+                "{mm}": f"{current_date.month:02d}",
+                "{month name}": month_name,
+                "{yyyy}": str(current_date.year),
+                "{дата}": current_date.strftime("%d.%m.%Y"),
+                "{число месяца}": str(current_date.day),
+                "{месяц}": month_name,
+                "{месяц в родительном падеже}": month_name_genitive,
+                "{месяц В РОДИТЕЛЬНОМ ПАДЕЖЕ, ты сам должен определить}": month_name_genitive,
+                "{год}": str(current_date.year),
             }
             
             # Создаем ZIP-архив с документами после открытия дела
