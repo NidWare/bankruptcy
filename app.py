@@ -771,6 +771,7 @@ def initial_documents():
                 "{ИНН ДОЛЖНИКА}": inn,
                 "{СНИЛС ДОЛЖНИКА}": snils,
                 "{номер дела}": case_number if case_number else "",
+                "{Номер дела}": case_number if case_number else "",
                 "{месторасположение должника}": registered_address,
                 "{сумма требований к должнику}": f"{formatted_total_debt} рублей",
                 
@@ -974,6 +975,7 @@ def case_documents():
                 
                 # Информация о деле
                 "{номер дела}": case_number,
+                "{Номер дела}": case_number,
                 "{дело}": case_number,
                 "{судья}": judge_name,
                 "{Фамилия судьи + ее инициалы}": judge_formatted,
