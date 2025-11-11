@@ -1030,10 +1030,36 @@ def initial_documents():
         debt_amount_digits = request.form.get('debt_amount_digits', '').strip()
         debt_amount_words = request.form.get('debt_amount_words', '').strip()
         
-        # Получаем данные о госпошлине (по умолчанию 300 рублей для банкротства физлиц)
-        state_duty = request.form.get('state_duty', '300').strip()
-        if not state_duty:
-            state_duty = '300'
+        # Получаем данные о госпошлине
+        state_duty = request.form.get('state_duty', '').strip()
+        state_duty_exemption_reason = request.form.get('state_duty_exemption_reason', '').strip()
+        
+        # Формируем значение для плейсхолдера {госпошлина}
+        state_duty_text = ""
+        try:
+            if state_duty and state_duty != '0':
+                duty_amount = float(state_duty.replace(',', '.').replace(' ', ''))
+                if duty_amount > 0:
+                    # Госпошлина указана и больше 0
+                    state_duty_text = f"{state_duty} рублей"
+                elif state_duty_exemption_reason:
+                    # Указан 0 и есть причина освобождения
+                    state_duty_text = f"Освобожден в силу {state_duty_exemption_reason}"
+                else:
+                    # Указан 0, но причины нет - используем дефолт
+                    state_duty_text = "300 рублей"
+            elif state_duty_exemption_reason:
+                # Пустое поле, но есть причина освобождения
+                state_duty_text = f"Освобожден в силу {state_duty_exemption_reason}"
+            else:
+                # Пусто и без причины - стандартная сумма
+                state_duty_text = "300 рублей"
+        except (ValueError, AttributeError):
+            # Ошибка парсинга - используем как есть или дефолт
+            if state_duty:
+                state_duty_text = f"{state_duty} рублей"
+            else:
+                state_duty_text = "300 рублей"
         
         # Получаем данные о браке и детях
         has_marriage = request.form.get('has_marriage', '').strip()  # 'yes' или 'no'
@@ -1237,7 +1263,7 @@ def initial_documents():
                 "{сумма долга буквами}": debt_amount_words,
                 "{общая сумма задолженности}": f"{formatted_total_debt} рублей",
                 "{сумма требований}": formatted_total_debt,
-                "{госпошлина}": state_duty,  # В шаблоне уже есть слово "рублей"
+                "{госпошлина}": state_duty_text,  # Форматированная строка с госпошлиной или причиной освобождения
                 "123213": debt_amount_digits,  # Плейсхолдер для суммы цифрами из шаблона
                 "аываыа": debt_amount_words,  # Плейсхолдер для суммы прописью из шаблона
                 

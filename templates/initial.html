@@ -514,6 +514,25 @@
                     </div>
                 </div>
 
+                <!-- Информация о госпошлине -->
+                <div class="form-section">
+                    <h3 class="section-title">💳 Государственная пошлина</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="state_duty">Сумма госпошлины (в рублях)</label>
+                            <input type="text" id="state_duty" name="state_duty" 
+                                   placeholder="300" value="300">
+                            <small style="color: #6b7280; margin-top: 0.25rem; font-size: 0.8125rem;">Оставьте 0 или пустым, если освобожден от уплаты</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="state_duty_exemption_reason">Причина освобождения от госпошлины</label>
+                            <input type="text" id="state_duty_exemption_reason" name="state_duty_exemption_reason" 
+                                   placeholder="ст. 333.35 НК РФ">
+                            <small style="color: #6b7280; margin-top: 0.25rem; font-size: 0.8125rem;">Заполняется только если освобожден от уплаты</small>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Кредиторы -->
                 <div class="form-section">
                     <h3 class="section-title">🏛️ Кредиторы</h3>
